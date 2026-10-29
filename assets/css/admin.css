@@ -1,0 +1,34 @@
+/* Orders → Tracking sync and the order screen's Shipments box. Badge colors come from the theme's admin styles. */
+
+.sfs-admin__intro { max-width: 760px; }
+
+.sfs-pill { display: inline-block; margin: 0 0 0 8px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; vertical-align: middle; }
+.sfs-pill--dry { background: #fff4e5; color: #8a4b00; }
+.sfs-pill--live { background: #e7f7ef; color: #117a4c; }
+
+.sfs-table { margin-top: 8px; }
+.sfs-table--facts th { width: 200px; }
+.sfs-table td { vertical-align: top; }
+.sfs-actions { white-space: nowrap; }
+.sfs-actions .button, .sfs-actions .button-link { margin: 2px 4px 2px 0; }
+.sfs-danger.button-link { color: #b32d2e; }
+.sfs-error { color: #b32d2e; }
+.sfs-state { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #eef1f4; font-size: 11px; }
+.sfs-state--needs_review { background: #fff4e5; color: #8a4b00; }
+.sfs-log--warning td { background: #fcf9e8; }
+.sfs-details { margin: 10px 0; }
+.sfs-check { display: inline-block; margin: 2px 0; }
+.sfs-check + .description { display: block; margin: 0 0 6px 24px; }
+.sfs-number { display: inline-block; margin: 0 16px 6px 0; }
+.sfs-key { max-width: 760px; }
+.sfs-admin__msg, .sfs-box__msg { min-height: 1.5em; font-weight: 600; }
+.sfs-admin__msg.is-error, .sfs-box__msg.is-error { color: #b32d2e; }
+
+.sfs-box__b2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.sfs-box__b2 input { width: 260px; max-width: 100%; }
+.sfs-box__b2 .description { flex-basis: 100%; }
+.sfs-box__add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
+.sfs-box__add input { width: 220px; max-width: 100%; }
+.sfs-events-row td { padding-top: 0; }
+.sfs-admin-events { margin: 6px 0 0 18px; }
+.sfs-items { margin: 4px 0 0 18px; list-style: disc; }

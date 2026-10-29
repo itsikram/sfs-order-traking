@@ -1,0 +1,317 @@
+/*
+ * Shipments card on the tracking page, order page and My Orders. Uses the shop tokens from the theme's
+ * css/shop.css (with fallbacks) so it matches the existing cards. Mobile first.
+ */
+
+.sfs-visually-hidden {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.sfs-shipments {
+	margin: 18px 0 0;
+	padding-top: 16px;
+	border-top: 1px solid var(--shop-line, #e3e9ef);
+}
+
+.sfs-shipments--card {
+	margin: 0 0 18px;
+	padding: 16px;
+	border-top: 0;
+}
+
+.sfs-shipments__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 4px 12px;
+	margin-bottom: 10px;
+}
+
+.sfs-shipments__title {
+	margin: 0;
+	font-size: 1.05rem;
+	line-height: 1.3;
+}
+
+.sfs-shipments__note {
+	margin: 0;
+	color: var(--shop-warn, #8a4b00);
+	font-size: 0.9rem;
+	font-weight: 600;
+}
+
+.sfs-shipments__list {
+	display: grid;
+	gap: 12px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sfs-package {
+	min-width: 0;
+	padding: 14px;
+	border: 1px solid var(--shop-line, #e3e9ef);
+	border-radius: 10px;
+	background: var(--shop-soft, #f5f8fb);
+}
+
+.sfs-package--delivered {
+	border-color: #bfe3d0;
+	background: var(--shop-success-soft, #e7f7ef);
+}
+
+.sfs-package--exception,
+.sfs-package--returned {
+	border-color: #f2d4a6;
+	background: var(--shop-warn-soft, #fff4e5);
+}
+
+.sfs-package__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px 10px;
+	margin-bottom: 8px;
+}
+
+.sfs-package__name {
+	margin: 0;
+	color: var(--shop-ink, #172027);
+	font-weight: 700;
+}
+
+.sfs-package p {
+	margin: 0 0 6px;
+	overflow-wrap: anywhere;
+}
+
+.sfs-package__label {
+	display: block;
+	color: var(--shop-muted, #5b6b7b);
+	font-size: 0.8rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.sfs-package__number {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+}
+
+.sfs-package__number .sfs-package__label {
+	flex-basis: 100%;
+}
+
+.sfs-package__number code {
+	padding: 2px 6px;
+	border-radius: 6px;
+	background: #fff;
+	color: var(--shop-ink, #172027);
+	font-size: 0.95rem;
+	word-break: break-all;
+}
+
+.sfs-copy {
+	min-height: 32px;
+	padding: 4px 12px;
+	border: 1px solid var(--shop-brand, #1fa8de);
+	border-radius: 999px;
+	background: #fff;
+	color: var(--shop-brand-dark, #1287b5);
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.sfs-copy:hover {
+	background: #eef7fc;
+}
+
+.sfs-copy:focus-visible,
+.sfs-package__carrier:focus-visible,
+.sfs-package__history summary:focus-visible,
+.sfs-shipments__expired a:focus-visible {
+	outline: 3px solid var(--shop-brand, #1fa8de);
+	outline-offset: 2px;
+}
+
+.sfs-package__eta small {
+	color: var(--shop-muted, #5b6b7b);
+}
+
+.sfs-package__latest .sfs-package__label {
+	display: inline;
+	margin-right: 4px;
+}
+
+.sfs-package__history {
+	margin: 4px 0 8px;
+}
+
+.sfs-package__history summary {
+	display: inline-block;
+	min-height: 32px;
+	padding: 4px 0;
+	color: var(--shop-brand-dark, #1287b5);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.sfs-events {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.sfs-event {
+	position: relative;
+	display: grid;
+	gap: 1px;
+	padding: 6px 0 8px 18px;
+	border-left: 2px solid var(--shop-line, #e3e9ef);
+	font-size: 0.9rem;
+}
+
+.sfs-event::before {
+	content: "";
+	position: absolute;
+	top: 11px;
+	left: -5px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #a8b4c0;
+}
+
+.sfs-event:first-child::before {
+	background: var(--shop-brand, #1fa8de);
+}
+
+.sfs-event--delivered::before {
+	background: var(--shop-success, #117a4c);
+}
+
+.sfs-event--exception::before,
+.sfs-event--returned::before {
+	background: #e59a2a;
+}
+
+.sfs-event__when,
+.sfs-event__where,
+.sfs-event__note {
+	color: var(--shop-muted, #5b6b7b);
+	font-size: 0.85rem;
+}
+
+.sfs-event__what {
+	color: var(--shop-ink, #172027);
+	font-weight: 600;
+}
+
+.sfs-event__note {
+	display: block;
+	font-weight: 400;
+}
+
+.sfs-package__foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px 12px;
+	margin-top: 8px;
+}
+
+.sfs-package__updated {
+	color: var(--shop-muted, #5b6b7b);
+	font-size: 0.85rem;
+}
+
+.sfs-package .sfs-package__updated {
+	margin: 0;
+}
+
+.sfs-package__carrier {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 32px;
+	color: var(--shop-brand-dark, #1287b5);
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.sfs-package__carrier:hover {
+	text-decoration: underline;
+}
+
+.sfs-shipments__expired {
+	margin: 10px 0 0;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--shop-warn-soft, #fff4e5);
+	color: var(--shop-warn, #8a4b00);
+	font-weight: 600;
+}
+
+/* Fourth progress step "Delivered" (theme .order-progress is a 3-column grid). */
+.order-progress.order-progress--4 {
+	grid-template-columns: repeat(4, 1fr);
+}
+
+.order-progress--4 li {
+	font-size: 0.85rem;
+}
+
+/* My Orders row summary. */
+.sfs-mini {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+}
+
+.sfs-mini__text {
+	color: var(--shop-muted, #5b6b7b);
+}
+
+@media (min-width: 640px) {
+	.sfs-package {
+		padding: 16px 18px;
+	}
+
+	.sfs-package__number .sfs-package__label {
+		flex-basis: auto;
+		margin-right: 4px;
+	}
+
+	.sfs-event {
+		grid-template-columns: 9.5rem 1fr;
+		column-gap: 12px;
+	}
+
+	.sfs-event__where {
+		grid-column: 2;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.sfs-copy,
+	.sfs-package {
+		transition: background-color 0.2s ease, border-color 0.2s ease;
+	}
+}

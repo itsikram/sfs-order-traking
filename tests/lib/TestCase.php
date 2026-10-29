@@ -85,7 +85,8 @@ abstract class TestCase {
 	protected function assertStringContains(string $needle, string $haystack, string $message = ''): void {
 		$this->assertions++;
 		if (false === strpos($haystack, $needle)) {
-			$this->fail(($message ? $message . "\n" : '') . self::export($needle) . ' not found in ' . self::export(substr($haystack, 0, 500)));
+			$readable = trim((string) preg_replace('/\s+/', ' ', strip_tags($haystack)));
+			$this->fail(($message ? $message . "\n" : '') . self::export($needle) . ' not found in ' . self::export(substr($readable, 0, 1500)));
 		}
 	}
 

@@ -1,6 +1,5 @@
 /* Orders → Tracking sync and the order screen's Shipments box. Badge colors come from the theme's admin styles. */
 
-.sfs-admin__intro { max-width: 760px; }
 
 .sfs-pill { display: inline-block; margin: 0 0 0 8px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; vertical-align: middle; }
 .sfs-pill--dry { background: #fff4e5; color: #8a4b00; }
@@ -20,7 +19,6 @@
 .sfs-check { display: inline-block; margin: 2px 0; }
 .sfs-check + .description { display: block; margin: 0 0 6px 24px; }
 .sfs-number { display: inline-block; margin: 0 16px 6px 0; }
-.sfs-key { max-width: 760px; }
 .sfs-admin__msg, .sfs-box__msg { min-height: 1.5em; font-weight: 600; }
 .sfs-admin__msg.is-error, .sfs-box__msg.is-error { color: #b32d2e; }
 
@@ -35,3 +33,25 @@
 .sfs-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
 .sfs-table .check-column { width: 2.2em; padding-left: 8px; }
 .sfs-table tr.is-selected td, .sfs-table tr.is-selected th { background: #f0f6fc; }
+
+/* Tracking sync page: summary tiles, key card, folded sections. */
+.sfs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; max-width: 1000px; margin: 16px 0 20px; }
+.sfs-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid #dcdcde; border-left: 4px solid #8c8f94; border-radius: 4px; background: #fff; color: #1d2327; text-decoration: none; }
+a.sfs-tile:hover, a.sfs-tile:focus { border-color: #2271b1; color: #1d2327; }
+.sfs-tile strong { font-size: 16px; }
+.sfs-tile span { color: #50575e; }
+.sfs-tile .sfs-tile__label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #646970; }
+.sfs-tile--ok { border-left-color: #00a32a; }
+.sfs-tile--warn { border-left-color: #dba617; }
+.sfs-card { max-width: 1000px; margin: 20px 0; padding: 4px 20px 12px; border: 1px solid #dcdcde; border-radius: 4px; background: #fff; }
+.sfs-key-form label { display: block; margin-bottom: 4px; font-weight: 600; }
+.sfs-copy-field { display: flex; flex-wrap: wrap; gap: 6px; }
+.sfs-copy-field input { flex: 1 1 280px; max-width: 520px; }
+.sfs-key-form__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.sfs-fold { max-width: 1000px; margin: 10px 0; border: 1px solid #dcdcde; border-radius: 4px; background: #fff; }
+.sfs-fold > summary { padding: 12px 16px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.sfs-fold[open] > summary { border-bottom: 1px solid #f0f0f1; }
+.sfs-fold > :not(summary) { margin-left: 16px; margin-right: 16px; }
+.sfs-fold > :last-child { margin-bottom: 16px; }
+.sfs-fold .form-table th { width: 180px; }
+.sfs-card h2 { margin: 14px 0 8px; font-size: 15px; }

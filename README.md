@@ -45,19 +45,21 @@ After a push, check the mode on live. To pin dry-run on live regardless of pushe
 define('SFS_TRACKING_DRY_RUN', false); // or true
 ```
 
-The extension key lives only in `wp-config.php` (`SFS_TRACKING_KEY_ID`, `SFS_TRACKING_SECRET`), never in options.
+The extension key is saved on **Orders → Tracking sync → Connect the extension**, in the option
+`wudt_sfs_tracking_key`. The site migration tool keeps each site's own `wudt_` options, so local and live keep
+separate keys and a push never copies one over the other. If `SFS_TRACKING_KEY_ID` and `SFS_TRACKING_SECRET` are
+defined in `wp-config.php`, they are used instead (remove them to manage the key on the page).
 
 ## Go-live runbook (owner)
 
 1. Upload this folder to live `wp-content/plugins/sfs-order-tracking/` (or upload `sfs-order-tracking-1.0.0.zip`
    under Plugins → Add New → Upload) and **activate** it. Upload these four changed theme files to
-   `wp-content/themes/wholesale/`:
-   - `inc/admin-orders.php`
-   - `page-track-order.php`
-   - `single-order.php`
-   - `my_orders.php`
-2. In wp-admin go to **Orders → Tracking sync** and click **Generate key**. Copy the two `define(...)` lines it shows
-   (they are shown only once) into live `wp-config.php` using cPanel File Manager, above "That's all, stop editing!".
+   `wp-content/themes/wholesale/` (the theme changes on branch `feature/order-tracking-sync`):
+   - `functions.php`, `css/shop.css`
+   - `inc/orders.php`, `inc/admin-orders.php`, `inc/order-reviews.php`
+   - `page-track-order.php`, `single-order.php`, `my_orders.php`
+2. In wp-admin go to **Orders → Tracking sync → Connect the extension**, click **Generate new key**, copy the key ID
+   and secret (Copy buttons), and click **Save key**. The secret is not shown again after saving.
 3. In Chrome: open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and choose the
    `sfs-tracking-extension` folder. Open its Options, choose **Live**, paste the key ID and secret, and click
    **Test connection**. Then run **Test carrier check** with one current UPS or FedEx number.

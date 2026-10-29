@@ -385,3 +385,8 @@
 		grid-template-columns: 1.2fr 0.8fr 1.4fr;
 	}
 }
+
+/* "Track package" links land on the shipments below the sticky header. */
+#shipments {
+	scroll-margin-top: 150px;
+}

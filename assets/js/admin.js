@@ -19,6 +19,48 @@
 		};
 	}
 
+	// Tracking sync page: "Generate new key" fills both fields (shown so they can be copied), Copy buttons, and a
+	// confirmation before removing the key.
+	var keyForm = document.querySelector('[data-sfs-key-form]');
+	if (keyForm) {
+		var generate = keyForm.querySelector('[data-sfs-generate]');
+		generate.addEventListener('click', function () {
+			var secret = keyForm.querySelector('#sfs-secret');
+			keyForm.querySelector('#sfs-key-id').value = generate.getAttribute('data-key-id');
+			secret.value = generate.getAttribute('data-secret');
+			secret.type = 'text';
+			secret.required = true;
+			keyForm.querySelector('[data-sfs-key-note]').hidden = false;
+		});
+		Array.prototype.forEach.call(keyForm.querySelectorAll('[data-sfs-copy]'), function (button) {
+			button.addEventListener('click', function () {
+				var field = keyForm.querySelector(button.getAttribute('data-sfs-copy'));
+				if (!field.value) {
+					return;
+				}
+				var done = function () {
+					button.textContent = 'Copied';
+					window.setTimeout(function () {
+						button.textContent = 'Copy';
+					}, 1500);
+				};
+				if (navigator.clipboard) {
+					navigator.clipboard.writeText(field.value).then(done, function () {
+						field.select();
+					});
+				} else {
+					field.select();
+				}
+			});
+		});
+		keyForm.addEventListener('submit', function (event) {
+			var submitter = event.submitter;
+			if (submitter && submitter.hasAttribute('data-sfs-confirm') && !window.confirm(submitter.getAttribute('data-sfs-confirm'))) {
+				event.preventDefault();
+			}
+		});
+	}
+
 	var config = window.sfsTrackingAdmin;
 	if (!config || !window.fetch) {
 		return;

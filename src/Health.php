@@ -43,7 +43,7 @@ final class Health {
 		$problems = array();
 
 		if (!Keys::configured()) {
-			$problems['keys'] = array('level' => 'warning', 'text' => 'Tracking sync is not connected yet: generate a key on Orders → Tracking sync and paste it into wp-config.php.', 'email' => false);
+			$problems['keys'] = array('level' => 'warning', 'text' => 'Tracking sync is not connected yet: open Orders → Tracking sync, generate a key, save it, and enter the same key in the extension Options.', 'email' => false);
 		}
 
 		$last = Log::last_run();

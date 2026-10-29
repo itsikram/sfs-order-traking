@@ -21,6 +21,7 @@ wp_clear_scheduled_hook(SFS\OrderTracking\Health::CRON);
 SFS\OrderTracking\Schema::drop();
 delete_option(SFS\OrderTracking\Settings::OPTION);
 delete_option(SFS\OrderTracking\Health::MAIL_OPTION);
+delete_option(SFS\OrderTracking\Keys::OPTION);
 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfs\\_trk\\_%' OR option_name LIKE '\\_transient\\_timeout\\_sfs\\_trk\\_%' OR option_name IN ('_transient_sfs_tracking_pruned', '_transient_timeout_sfs_tracking_pruned')"); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 
 if ($sfs_delete_meta) {

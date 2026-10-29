@@ -16,7 +16,7 @@ $sfs_order = $payload['order'];
 $sfs_title_id = 'sfs-shipments-' . strtolower($sfs_order['number']);
 $sfs_refresh = 'order' === $context ? get_permalink($order_id) : (function_exists('wholesale_track_order_url') ? wholesale_track_order_url($order_id) : home_url('/track-order/'));
 ?>
-<section class="sfs-shipments<?php echo 'order' === $context ? ' checkout-card sfs-shipments--card' : ''; ?>" aria-labelledby="<?php echo esc_attr($sfs_title_id); ?>" data-sfs-shipments data-endpoint="<?php echo esc_url($endpoint); ?>" data-token="<?php echo esc_attr($token); ?>" data-etag="<?php echo esc_attr($etag); ?>" data-server-time="<?php echo esc_attr((string) $now); ?>" data-expires="<?php echo esc_attr((string) ($now + \SFS\OrderTracking\PublicView::TOKEN_TTL)); ?>">
+<section id="shipments" class="sfs-shipments<?php echo 'order' === $context ? ' checkout-card sfs-shipments--card' : ''; ?>" aria-labelledby="<?php echo esc_attr($sfs_title_id); ?>" data-sfs-shipments data-endpoint="<?php echo esc_url($endpoint); ?>" data-token="<?php echo esc_attr($token); ?>" data-etag="<?php echo esc_attr($etag); ?>" data-server-time="<?php echo esc_attr((string) $now); ?>" data-expires="<?php echo esc_attr((string) ($now + \SFS\OrderTracking\PublicView::TOKEN_TTL)); ?>">
 	<div class="sfs-shipments__head">
 		<<?php echo esc_html($heading); ?> id="<?php echo esc_attr($sfs_title_id); ?>" class="sfs-shipments__title"><?php echo esc_html(1 === count($payload['shipments']) ? 'Shipment' : 'Shipments'); ?></<?php echo esc_html($heading); ?>>
 		<p class="sfs-shipments__note" data-sfs-note<?php echo '' === $sfs_order['note'] ? ' hidden' : ''; ?>><?php echo esc_html($sfs_order['note']); ?></p>

@@ -143,6 +143,10 @@ final class PublicView {
 		$summary = ShipmentMerger::summary($shipments);
 		$status = $summary['all_delivered'] ? 'delivered' : self::headline_status($shipments);
 		$label = self::status_label($status, $shipments);
+		// A shipped order's status pill already says the stage and how many packages arrived: only the estimate here.
+		if (in_array((string) get_post_status((int) $order_id), Effects::SHIPPED, true)) {
+			return !$summary['all_delivered'] && '' !== $summary['next_eta'] ? '<span class="sfs-mini"><span class="sfs-mini__text">' . esc_html('Est. delivery ' . self::date_label($summary['next_eta'], 'D, M j')) . '</span></span>' : '';
+		}
 		$text = '';
 		if ($summary['all_delivered']) {
 			$text = $summary['total'] > 1 ? 'All ' . $summary['total'] . ' packages delivered' : '';

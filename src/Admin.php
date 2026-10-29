@@ -1,7 +1,7 @@
 <?php
 /**
- * Staff screens: Orders → Tracking sync (status, review queue, carrier health, new carrier wording, log, settings,
- * key generator), the Shipments box on the order screen (B2Sign order number field, packages, check now, add,
+ * Staff screens: Orders → Tracking sync (summary, review queue, extension key; settings, carrier health and the log
+ * folded away), the Shipments box on the order screen (B2Sign order number field, packages, check now, add,
  * remove) and the Shipment column in the order list.
  *
  * @package sfs-order-tracking
@@ -18,10 +18,10 @@ use SFS\OrderTracking\Core\TrackingUrls;
 final class Admin {
 	public const PAGE = 'sfs-tracking';
 
-	/** @var array{key_id:string,secret:string}|null A key generated in this request, shown once. */
-	private static $generated = null;
 	/** @var string */
 	private static $saved = '';
+	/** @var string */
+	private static $error = '';
 
 	public static function hooks(): void {
 		add_action('admin_menu', array(self::class, 'menu'));
@@ -52,17 +52,27 @@ final class Admin {
 	}
 
 	/**
-	 * Settings and key generation are POSTs to the page itself, so a generated key can be shown once without
-	 * storing it anywhere.
+	 * Settings and the extension key are POSTs to the page itself.
 	 */
 	public static function handle_post(): void {
 		if ('POST' !== ($_SERVER['REQUEST_METHOD'] ?? '') || !current_user_can('manage_options')) {
 			return;
 		}
-		if (isset($_POST['sfs_generate_key'])) {
-			check_admin_referer('sfs_tracking_generate_key');
-			self::$generated = Keys::generate();
-			Log::add('action', 'New extension key generated (not stored; shown once)', array('user' => get_current_user_id()));
+		if (isset($_POST['sfs_key_id'])) {
+			check_admin_referer('sfs_tracking_key');
+			if (isset($_POST['sfs_forget_key'])) {
+				Keys::forget();
+				self::$saved = 'Key removed. The extension cannot sync until a new key is saved here and in its Options.';
+				Log::add('action', 'Extension key removed', array('user' => get_current_user_id()));
+				return;
+			}
+			$error = Keys::save(sanitize_text_field(wp_unslash((string) $_POST['sfs_key_id'])), sanitize_text_field(wp_unslash((string) ($_POST['sfs_secret'] ?? ''))));
+			if ('' !== $error) {
+				self::$error = $error;
+				return;
+			}
+			self::$saved = 'Key saved. Enter the same key ID and secret in the extension Options, then click Sync now.';
+			Log::add('action', 'Extension key saved (key ID ' . Keys::key_id() . ')', array('user' => get_current_user_id()));
 		} elseif (isset($_POST['sfs_settings'])) {
 			check_admin_referer('sfs_tracking_settings');
 			$input = is_array($_POST['sfs_settings']) ? wp_unslash($_POST['sfs_settings']) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -78,49 +88,70 @@ final class Admin {
 		$dry = Settings::dry_run();
 		$last = Log::last_run();
 		$counts = Inbox::counts();
-		$active = Orders::active();
 		$packages = 0;
-		foreach ($active as $shipments) {
+		foreach (Orders::active() as $shipments) {
 			foreach ($shipments as $shipment) {
 				if ('' === CheckScheduler::stop_reason($shipment, time())) {
 					$packages++;
 				}
 			}
 		}
+		$stale = $last && (int) $last['time'] < time() - (int) Settings::get('heartbeat_hours') * HOUR_IN_SECONDS;
+		if (!Keys::configured()) {
+			$connection = array('warn', 'Not connected', 'Save a key below, then enter it in the extension.');
+		} elseif (!$last) {
+			$connection = array('warn', 'Waiting for the extension', 'No sync yet. Open the extension and click Sync now.');
+		} else {
+			$connection = array($stale ? 'warn' : 'ok', 'Last sync ' . human_time_diff((int) $last['time']) . ' ago', $stale ? 'Check that Chrome is open and signed in to B2Sign.' : 'Syncing normally.');
+		}
+		$review = (int) $counts['needs_review'] + (int) $counts['unmatched'];
 		?>
 		<div class="wrap sfs-admin">
 			<h1 class="wp-heading-inline">Tracking sync</h1>
-			<span class="sfs-pill sfs-pill--<?php echo $dry ? 'dry' : 'live'; ?>"><?php echo $dry ? 'Dry run: nothing is saved to orders' : 'Live: syncs update orders'; ?></span>
+			<span class="sfs-pill sfs-pill--<?php echo $dry ? 'dry' : 'live'; ?>"><?php echo $dry ? 'Dry run: orders are not changed' : 'Live: orders update automatically'; ?></span>
 			<?php if (self::$saved) : ?>
 				<div class="notice notice-success"><p><?php echo esc_html(self::$saved); ?></p></div>
 			<?php endif; ?>
-			<p class="sfs-admin__intro">The SFS Tracking Sync Chrome extension reads B2Sign orders and UPS/FedEx tracking pages in the owner's Chrome and sends them here. Customers see live status on the tracking page; the supplier is never shown to them.</p>
+			<?php if (self::$error) : ?>
+				<div class="notice notice-error"><p><?php echo esc_html(self::$error); ?></p></div>
+			<?php endif; ?>
 
-			<h2>Status</h2>
-			<table class="widefat striped sfs-table sfs-table--facts">
-				<tbody>
-					<tr><th scope="row">Extension key</th><td><?php echo Keys::configured() ? 'Set in wp-config.php (key ID ' . esc_html(Keys::key_id()) . ')' : '<strong>Not set.</strong> Generate a key below.'; ?></td></tr>
-					<tr><th scope="row">Last sync</th><td>
-						<?php if ($last) : ?>
-							<?php echo esc_html(human_time_diff($last['time']) . ' ago · ' . $last['message']); ?>
-							<?php $client = (array) ($last['context']['client'] ?? array()); ?>
-							<?php if (!empty($client['version'])) : ?><br><span class="description"><?php echo esc_html('Extension ' . $client['version'] . ' · ' . ($client['env'] ?: 'unknown') . ' profile'); ?></span><?php endif; ?>
-						<?php else : ?>
-							Never. Load the extension in Chrome and click Sync now.
-						<?php endif; ?>
-					</td></tr>
-					<tr><th scope="row">Packages being checked</th><td><?php echo esc_html((string) $packages); ?></td></tr>
-					<tr><th scope="row">Review queue</th><td><?php echo esc_html(sprintf('%d need review · %d unmatched · %d marked not ours · %d linked', $counts['needs_review'], $counts['unmatched'], $counts['ignored'], $counts['linked'])); ?></td></tr>
-					<tr><th scope="row">Mode</th><td><?php echo $dry ? 'Dry run: the extension\'s syncs are previewed in the log and the review queue, and nothing changes on orders.' : 'Live: tracking is saved to orders' . (Settings::get('auto_ship') ? ', and an order is marked Shipped (one shipped email) when every item has shipped.' : '.'); ?><?php echo Settings::dry_run_locked() ? ' <em>(Pinned by SFS_TRACKING_DRY_RUN in wp-config.php.)</em>' : ''; ?></td></tr>
-				</tbody>
-			</table>
+			<div class="sfs-tiles">
+				<div class="sfs-tile sfs-tile--<?php echo esc_attr($connection[0]); ?>">
+					<span class="sfs-tile__label">Extension</span>
+					<strong><?php echo esc_html($connection[1]); ?></strong>
+					<span><?php echo esc_html($connection[2]); ?></span>
+				</div>
+				<a class="sfs-tile sfs-tile--<?php echo $review ? 'warn' : 'ok'; ?>" href="#review">
+					<span class="sfs-tile__label">To review</span>
+					<strong><?php echo esc_html($review ? sprintf('%d supplier item%s', $review, 1 === $review ? '' : 's') : 'Nothing'); ?></strong>
+					<span><?php echo esc_html($review ? 'Confirm the order or mark not ours.' : 'Every supplier item is linked.'); ?></span>
+				</a>
+				<div class="sfs-tile">
+					<span class="sfs-tile__label">Packages tracked</span>
+					<strong><?php echo esc_html((string) $packages); ?></strong>
+					<span><?php echo esc_html((int) $counts['linked'] . ' supplier items linked to orders'); ?></span>
+				</div>
+			</div>
 
 			<?php self::review_queue(); ?>
-			<?php self::carrier_health(); ?>
-			<?php self::log_table(); ?>
 			<?php if (current_user_can('manage_options')) : ?>
-				<?php self::settings_form(); ?>
 				<?php self::key_section(); ?>
+			<?php endif; ?>
+
+			<details class="sfs-fold">
+				<summary>Recent activity</summary>
+				<?php self::log_table(); ?>
+			</details>
+			<details class="sfs-fold">
+				<summary>Carrier pages</summary>
+				<?php self::carrier_health(); ?>
+			</details>
+			<?php if (current_user_can('manage_options')) : ?>
+				<details class="sfs-fold" id="settings"<?php echo self::$saved && !isset($_POST['sfs_key_id']) ? ' open' : ''; // phpcs:ignore WordPress.Security.NonceVerification ?>>
+					<summary>Settings</summary>
+					<?php self::settings_form(); ?>
+				</details>
 			<?php endif; ?>
 			<p class="sfs-admin__msg" aria-live="polite" data-sfs-msg></p>
 		</div>
@@ -134,12 +165,17 @@ final class Admin {
 			$items[(int) $row['item_id']] = $items[(int) $row['item_id']] ?? $row;
 			$items[(int) $row['item_id']]['numbers'][] = $row['tracking_number'];
 		}
+		$ignored = Inbox::rows(array('ignored'), 100);
+		if (!$items && !$ignored) {
+			echo '<span id="review"></span>';
+			return;
+		}
 		?>
 		<h2 id="review">Review queue</h2>
-		<p class="description">Supplier items that could not be matched with certainty. Typing the B2Sign order number on our order links them automatically; here you can confirm a suggested order or mark an item as not ours (other clients, stock).</p>
 		<?php if (!$items) : ?>
-			<p>Nothing to review.</p>
+			<p class="description">Nothing to review.</p>
 		<?php else : ?>
+			<p class="description">Supplier items we could not match for sure. Typing the B2Sign order number on our order links them automatically; or confirm a suggested order here, or mark an item not ours.</p>
 			<div class="sfs-bulk" data-sfs-bulk>
 				<label class="screen-reader-text" for="sfs-bulk-action">Bulk action</label>
 				<select id="sfs-bulk-action">
@@ -189,7 +225,6 @@ final class Admin {
 			</table>
 		<?php endif; ?>
 		<?php
-		$ignored = Inbox::rows(array('ignored'), 100);
 		if ($ignored) :
 			?>
 			<details class="sfs-details">
@@ -220,7 +255,6 @@ final class Admin {
 		$streaks = Health::carrier_streaks();
 		$wording = Log::wording_list();
 		?>
-		<h2>Carrier pages</h2>
 		<table class="widefat striped sfs-table sfs-table--facts">
 			<tbody>
 				<?php foreach (array('ups' => 'UPS', 'fedex' => 'FedEx') as $carrier => $name) :
@@ -250,7 +284,6 @@ final class Admin {
 	private static function log_table(): void {
 		$rows = Log::recent(60);
 		?>
-		<h2>Recent runs and actions</h2>
 		<table class="widefat striped sfs-table">
 			<thead><tr><th>When</th><th>Type</th><th>What</th></tr></thead>
 			<tbody>
@@ -284,7 +317,6 @@ final class Admin {
 			printf('<label class="sfs-number">%3$s <input type="number" name="sfs_settings[%1$s]" value="%2$d" min="%4$d" max="%5$d" class="small-text"></label>', esc_attr($key), (int) $s[$key], esc_html($label), $min, $max);
 		};
 		?>
-		<h2 id="settings">Settings</h2>
 		<form method="post" class="sfs-settings">
 			<?php wp_nonce_field('sfs_tracking_settings'); ?>
 			<table class="form-table" role="presentation">
@@ -330,17 +362,41 @@ final class Admin {
 	}
 
 	private static function key_section(): void {
+		$generated = Keys::generate();
 		?>
-		<h2 id="key">Extension key</h2>
-		<?php if (self::$generated) : ?>
-			<div class="notice notice-warning inline"><p><strong>Copy these two lines now; they are not stored and will not be shown again.</strong> Paste them into <code>wp-config.php</code> above “That's all, stop editing!”, then paste the key ID and secret into the extension's Options.</p></div>
-			<textarea class="large-text code sfs-key" rows="3" readonly onclick="this.select()"><?php echo esc_textarea(Keys::define_lines(self::$generated)); ?></textarea>
-		<?php endif; ?>
-		<p><?php echo Keys::configured() ? 'A key is set in wp-config.php. Generating a new one does not change it until you replace the two lines.' : 'No key is set yet.'; ?></p>
-		<form method="post">
-			<?php wp_nonce_field('sfs_tracking_generate_key'); ?>
-			<button type="submit" class="button" name="sfs_generate_key" value="1">Generate key</button>
-		</form>
+		<section class="sfs-card" id="key" aria-labelledby="sfs-key-title">
+			<h2 id="sfs-key-title">Connect the extension</h2>
+			<?php if (Keys::in_config()) : ?>
+				<p>This site uses the key in <code>wp-config.php</code> (key ID <code><?php echo esc_html(Keys::key_id()); ?></code>). To manage the key here instead, remove the two <code>SFS_TRACKING_…</code> lines from <code>wp-config.php</code>.</p>
+			<?php else : ?>
+				<p class="description">Use the same key ID and secret here and in the extension Options (pick Local or Live there to match this site). Local and live each keep their own key; a push does not copy it.</p>
+				<form method="post" class="sfs-key-form" data-sfs-key-form>
+					<?php wp_nonce_field('sfs_tracking_key'); ?>
+					<p>
+						<label for="sfs-key-id">Key ID</label>
+						<span class="sfs-copy-field">
+							<input type="text" id="sfs-key-id" name="sfs_key_id" class="regular-text code" value="<?php echo esc_attr(Keys::key_id()); ?>" autocomplete="off" spellcheck="false" required pattern="[A-Za-z0-9_\-]{4,64}">
+							<button type="button" class="button" data-sfs-copy="#sfs-key-id">Copy</button>
+						</span>
+					</p>
+					<p>
+						<label for="sfs-secret">Secret</label>
+						<span class="sfs-copy-field">
+							<input type="password" id="sfs-secret" name="sfs_secret" class="regular-text code" value="" autocomplete="new-password" spellcheck="false" pattern="[A-Za-z0-9_\-]{32,128}" placeholder="<?php echo esc_attr(Keys::configured() ? 'Saved (hidden). Leave empty to keep it.' : 'At least 32 characters'); ?>"<?php echo Keys::configured() ? '' : ' required'; ?>>
+							<button type="button" class="button" data-sfs-copy="#sfs-secret">Copy</button>
+						</span>
+					</p>
+					<p class="sfs-key-form__actions">
+						<button type="button" class="button" data-sfs-generate data-key-id="<?php echo esc_attr($generated['key_id']); ?>" data-secret="<?php echo esc_attr($generated['secret']); ?>">Generate new key</button>
+						<button type="submit" class="button button-primary">Save key</button>
+						<?php if (Keys::configured()) : ?>
+							<button type="submit" class="button-link sfs-danger" name="sfs_forget_key" value="1" formnovalidate data-sfs-confirm="Remove the key? The extension stops syncing with this site until a new key is saved.">Remove key</button>
+						<?php endif; ?>
+					</p>
+					<p class="description" data-sfs-key-note hidden>New key filled in. Copy both into the extension Options, then click Save key. The secret is not shown again after saving.</p>
+				</form>
+			<?php endif; ?>
+		</section>
 		<?php
 	}
 

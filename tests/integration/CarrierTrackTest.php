@@ -326,6 +326,8 @@ final class CarrierTrackTest extends IntegrationCase {
 		$this->assertStringNotContains('Origintown', $html);
 		$this->assertStringNotContains('b2sign', strtolower($html));
 		$this->assertSame('', PublicView::shipments_html('', 999999999, 'track'), 'no order, no card');
-		$this->assertStringContains('Delivered', PublicView::my_orders_summary('', $order['id']));
+		clean_post_cache($order['id']);
+		$this->assertSame('', PublicView::my_orders_summary('', $order['id']), 'the row badge already says Delivered');
+		$this->assertStringContains('Delivered', wholesale_order_status_badge(get_post_status($order['id']), $order['id']));
 	}
 }

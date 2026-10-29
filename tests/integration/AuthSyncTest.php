@@ -6,11 +6,38 @@ namespace SFS\OrderTracking\Tests\Integration;
 require_once __DIR__ . '/IntegrationCase.php';
 
 use SFS\OrderTracking\Inbox;
+use SFS\OrderTracking\Keys;
 use SFS\OrderTracking\Lock;
 use SFS\OrderTracking\Orders;
 use SFS\OrderTracking\SyncService;
 
 final class AuthSyncTest extends IntegrationCase {
+	public function test_key_saved_on_the_page_is_per_site_and_never_beats_wp_config(): void {
+		$before = get_option(Keys::OPTION, null);
+		try {
+			$this->assertSame(0, strpos(Keys::OPTION, 'wudt_'), 'the migration tool keeps wudt_ options per site');
+			$this->assertTrue('' !== Keys::save('ab', str_repeat('a', 40)), 'key ID too short');
+			$this->assertTrue('' !== Keys::save('sfs_test', 'short'), 'secret too short');
+			$this->assertTrue('' !== Keys::save('sfs_test', str_repeat('a', 31) . '!'), 'secret with other characters');
+			$generated = Keys::generate();
+			$this->assertSame('', Keys::save($generated['key_id'], $generated['secret']));
+			$this->assertSame('', Keys::save('sfs_renamed', ''), 'empty secret keeps the saved one');
+			$stored = get_option(Keys::OPTION);
+			$this->assertSame(array('key_id' => 'sfs_renamed', 'secret' => $generated['secret']), $stored);
+			global $wpdb;
+			$autoload = (string) $wpdb->get_var($wpdb->prepare("SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", Keys::OPTION));
+			$this->assertTrue(in_array($autoload, array('no', 'off'), true), 'not autoloaded');
+			$this->assertTrue(Keys::in_config());
+			$this->assertSame(SFS_TRACKING_KEY_ID, Keys::key_id(), 'wp-config.php wins');
+			list($status) = $this->signed('GET', '/sfs-tracking/v1/ping');
+			$this->assertSame(200, $status, 'requests still use the wp-config key');
+			Keys::forget();
+			$this->assertNull(get_option(Keys::OPTION, null));
+		} finally {
+			null === $before ? delete_option(Keys::OPTION) : update_option(Keys::OPTION, $before, false);
+		}
+	}
+
 	public function test_signatures_skew_replay_size_and_lockout(): void {
 		list($status, $data) = $this->signed('GET', '/sfs-tracking/v1/ping');
 		$this->assertSame(200, $status);

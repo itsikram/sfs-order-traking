@@ -25,3 +25,8 @@
   approval, hold); shipped orders follow their packages (In transit, Out for delivery, Delivered, Delivery
   issue, Returned to sender). A status staff set by hand is kept until the packages show a new stage.
   Stage statuses are only written when the theme supports them.
+- Orders → Tracking sync is minimal: summary tiles, the review queue only when needed, a "Connect the extension"
+  card to generate, copy and save the key on the page (option wudt_sfs_tracking_key, kept per site by the
+  migration tool; wp-config.php constants still win), and settings, carrier pages and activity folded away.
+- My Orders: a shipped order's row shows only the estimate next to its status pill (no duplicate pill); the
+  shipments section has the #shipments anchor used by "Track package".

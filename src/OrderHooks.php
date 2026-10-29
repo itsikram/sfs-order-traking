@@ -26,6 +26,28 @@ final class OrderHooks {
 		// After the theme's handler (priority 5) has saved _tracking_carrier / _tracking_number.
 		add_action('save_post_order', array(self::class, 'save'), 20, 1);
 		add_filter('wholesale_order_activity_events', array(self::class, 'activity'), 10, 2);
+		add_action(self::LINK_EVENT, array(self::class, 'run_link'));
+	}
+
+	public const LINK_EVENT = 'sfs_tracking_link_order';
+
+	/**
+	 * Links an order's already-synced supplier items right after staff type its B2Sign number. Runs in its own
+	 * WP-Cron request, not inside this save (a status change there would re-enter the save handlers).
+	 */
+	private static function link_soon(int $post_id): void {
+		if (!wp_next_scheduled(self::LINK_EVENT, array($post_id))) {
+			wp_schedule_single_event(time(), self::LINK_EVENT, array($post_id));
+		}
+	}
+
+	/**
+	 * @param mixed $post_id
+	 */
+	public static function run_link($post_id): void {
+		if ('order' === get_post_type((int) $post_id)) {
+			SyncService::link_order((int) $post_id);
+		}
 	}
 
 	public static function save(int $post_id): void {
@@ -40,10 +62,13 @@ final class OrderHooks {
 			$theme_form = check_ajax_referer('inlineeditnonce', '_inline_edit', false);
 		}
 
-		if ($our_form && isset($_POST['sfs_b2_orders'])) {
+		if (($our_form || ($is_quick_edit && $theme_form)) && isset($_POST['sfs_b2_orders'])) {
 			$numbers = OrderNumberExtractor::b2_numbers(sanitize_text_field(wp_unslash($_POST['sfs_b2_orders'])));
 			if (Orders::set_b2_numbers($post_id, $numbers)) {
 				Orders::add_activity($post_id, $numbers ? 'B2Sign order number set: ' . implode(', ', $numbers) : 'B2Sign order number cleared');
+				if ($numbers) {
+					self::link_soon($post_id);
+				}
 			}
 		}
 

@@ -5,6 +5,20 @@
 (function () {
 	'use strict';
 
+	// Quick Edit on the order list: fill the B2Sign order number field from the row's Shipment column.
+	if (window.inlineEditPost && typeof window.inlineEditPost.edit === 'function') {
+		var edit = window.inlineEditPost.edit;
+		window.inlineEditPost.edit = function (id) {
+			edit.apply(this, arguments);
+			var postId = typeof id === 'object' ? this.getId(id) : id;
+			var data = document.querySelector('#post-' + postId + ' .sfs-quick-data');
+			var field = document.querySelector('#edit-' + postId + ' input[name="sfs_b2_orders"]');
+			if (data && field) {
+				field.value = data.getAttribute('data-b2') || '';
+			}
+		};
+	}
+
 	var config = window.sfsTrackingAdmin;
 	if (!config || !window.fetch) {
 		return;

@@ -28,6 +28,7 @@ final class Admin {
 		add_action('add_meta_boxes_order', array(self::class, 'meta_box'));
 		add_filter('manage_order_posts_columns', array(self::class, 'columns'), 30);
 		add_action('manage_order_posts_custom_column', array(self::class, 'column'), 10, 2);
+		add_action('quick_edit_custom_box', array(self::class, 'quick_edit'), 10, 2);
 		add_action('admin_enqueue_scripts', array(self::class, 'assets'));
 	}
 
@@ -46,7 +47,7 @@ final class Admin {
 		}
 		$base = dirname(__DIR__);
 		wp_enqueue_style('sfs-tracking-admin', plugins_url('/assets/css/admin.css', SFS_TRACKING_FILE), array(), (string) filemtime($base . '/assets/css/admin.css'));
-		wp_enqueue_script('sfs-tracking-admin', plugins_url('/assets/js/admin.js', SFS_TRACKING_FILE), array(), (string) filemtime($base . '/assets/js/admin.js'), array('in_footer' => true));
+		wp_enqueue_script('sfs-tracking-admin', plugins_url('/assets/js/admin.js', SFS_TRACKING_FILE), 'edit-order' === $screen->id ? array('inline-edit-post') : array(), (string) filemtime($base . '/assets/js/admin.js'), array('in_footer' => true));
 		wp_add_inline_script('sfs-tracking-admin', 'window.sfsTrackingAdmin = ' . wp_json_encode(array('root' => esc_url_raw(rest_url(Rest::NS . '/admin/')), 'nonce' => wp_create_nonce('wp_rest'))) . ';', 'before');
 	}
 
@@ -444,9 +445,15 @@ final class Admin {
 		if ('sfs_shipment' !== $column) {
 			return;
 		}
+		$numbers = Orders::b2_numbers((int) $post_id);
+		// Read by Quick Edit to fill the B2Sign order number field.
+		printf('<span class="hidden sfs-quick-data" data-b2="%s"></span>', esc_attr(implode(', ', $numbers)));
+		if ($numbers) {
+			printf('<span class="sfs-b2-numbers">%s</span><br>', esc_html('B2Sign ' . implode(', ', $numbers)));
+		}
 		$shipments = Orders::shipments((int) $post_id);
 		if (!$shipments) {
-			echo '&mdash;';
+			echo $numbers ? '<span class="description">No tracking yet</span>' : '&mdash;';
 			return;
 		}
 		$first = reset($shipments);
@@ -456,6 +463,29 @@ final class Admin {
 			esc_html(CarrierTextNormalizer::label((string) $first['status'])),
 			esc_html(trim((TrackingUrls::NAMES[$first['carrier']] ?? ucfirst((string) $first['carrier'])) . ' · ' . self::delivery_text($first) . (count($shipments) > 1 ? ' · +' . (count($shipments) - 1) . ' more' : '') . ' · ' . self::checked_text($first, time()), ' ·'))
 		);
+	}
+
+	/**
+	 * B2Sign order number field in the order list's Quick Edit (filled by assets/js/admin.js).
+	 *
+	 * @param mixed $column
+	 * @param mixed $post_type
+	 */
+	public static function quick_edit($column, $post_type): void {
+		if ('order' !== $post_type || 'sfs_shipment' !== $column) {
+			return;
+		}
+		?>
+		<fieldset class="inline-edit-col-right sfs-quick-edit">
+			<div class="inline-edit-col">
+				<label>
+					<span class="title">B2Sign</span>
+					<span class="input-text-wrap"><input type="text" name="sfs_b2_orders" value="" placeholder="e.g. B2612345" autocomplete="off" spellcheck="false"></span>
+				</label>
+				<p class="description">Separate several with commas. Tracking links right after saving.</p>
+			</div>
+		</fieldset>
+		<?php
 	}
 
 	private static function delivery_text(array $shipment): string {

@@ -91,9 +91,7 @@
 			refresh();
 		});
 		bar.querySelector('[data-sfs-bulk-apply]').addEventListener('click', function () {
-			var fixed = bar.querySelector('[data-sfs-bulk-fixed]');
-			var select = bar.querySelector('select');
-			var action = fixed ? fixed.value : select.value;
+			var action = bar.querySelector('select').value;
 			var ids = chosen().map(function (box) {
 				return Number(box.value);
 			});
@@ -113,6 +111,9 @@
 				if (!window.confirm(text)) {
 					return;
 				}
+			}
+			if (action === 'delete' && !window.confirm('Delete ' + ids.length + ' supplier item(s) from this list? If B2Sign still lists an item, the next daily sync adds it back. Use "Mark not ours" to hide an item for good.')) {
+				return;
 			}
 			var apply = bar.querySelector('[data-sfs-bulk-apply]');
 			apply.disabled = true;

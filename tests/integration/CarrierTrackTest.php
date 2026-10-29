@@ -104,7 +104,9 @@ final class CarrierTrackTest extends IntegrationCase {
 		$shipments['ups:' . $tn_a]['priority_until'] = time() + 600;
 		Orders::save_shipments($a['id'], $shipments);
 		$checks = $this->sync()['checks'];
-		$first_two = array_column(array_slice($checks, 0, 2), 'tracking_number');
+		// Only this test's packages: real local orders can have priority checks due too.
+		$mine = array_values(array_intersect(array_column($checks, 'tracking_number'), array($tn_a, $tn_b, $tn_c)));
+		$first_two = array_slice($mine, 0, 2);
 		sort($first_two);
 		$expected = array($tn_a, $tn_c);
 		sort($expected);

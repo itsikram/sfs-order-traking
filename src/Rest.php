@@ -66,7 +66,7 @@ final class Rest {
 			'callback' => array(self::class, 'inbox_bulk'),
 			'permission_callback' => array(self::class, 'can_review'),
 			'args' => array(
-				'action' => array('type' => 'string', 'required' => true, 'enum' => array('confirm', 'ignore', 'reopen')),
+				'action' => array('type' => 'string', 'required' => true, 'enum' => array('confirm', 'ignore', 'reopen', 'delete')),
 				'ids' => array('type' => 'array', 'required' => true, 'items' => array('type' => 'integer', 'minimum' => 1), 'maxItems' => 100),
 			),
 		));
@@ -245,7 +245,7 @@ final class Rest {
 				$details[] = $label . ': ' . $result['message'];
 			}
 		}
-		$words = array('confirm' => 'confirmed', 'ignore' => 'marked not ours', 'reopen' => 'reopened');
+		$words = array('confirm' => 'confirmed', 'ignore' => 'marked not ours', 'reopen' => 'reopened', 'delete' => 'deleted');
 		$message = sprintf('%d item(s) %s.', $done, $words[$action] ?? $action) . ($details ? ' Skipped: ' . implode('; ', $details) . '.' : '');
 		return array('ok' => true, 'done' => $done, 'skipped' => count($details), 'message' => $message, 'details' => $details);
 	}
@@ -261,6 +261,13 @@ final class Rest {
 			Inbox::set_state($item_id, 'ignored');
 			Log::add('action', 'Supplier item marked not ours', array('item' => $item_id));
 			return array('ok' => true, 'message' => 'Marked not ours. It will not be matched again.', 'status' => 200);
+		}
+		if ('delete' === $action) {
+			if (!Inbox::delete_item($item_id)) {
+				return array('ok' => false, 'message' => 'already linked to an order, not deleted', 'status' => 409);
+			}
+			Log::add('action', 'Supplier item deleted from the review queue', array('item' => $item_id));
+			return array('ok' => true, 'message' => 'Deleted.', 'status' => 200);
 		}
 		if ('reopen' === $action) {
 			Inbox::set_state($item_id, 'unmatched');

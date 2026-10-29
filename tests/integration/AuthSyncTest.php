@@ -303,8 +303,16 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertSame('ignored', Inbox::item_rows((int) $stranger['item_id'])[0]['state']);
 		$this->assertSame(1, $bulk('reopen', array($stranger_row))->get_data()['done']);
 		$this->assertSame('unmatched', Inbox::item_rows((int) $stranger['item_id'])[0]['state']);
-		$this->assertSame(400, $bulk('delete', array($stranger_row))->get_status(), 'unknown actions are refused');
+		$this->assertSame(400, $bulk('purge', array($stranger_row))->get_status(), 'unknown actions are refused');
+
+		$data = $bulk('delete', array($suggested_row, $stranger_row))->get_data();
+		$this->assertSame(1, $data['done']);
+		$this->assertStringContains('already linked', $data['message'], 'linked items are never deleted');
+		$this->assertSame(array(), Inbox::item_rows((int) $stranger['item_id']));
+		$this->assertSame('linked', Inbox::item_rows((int) $suggested['item_id'])[0]['state']);
+		$this->assertCount(1, Orders::shipments($order['id']));
 		wp_set_current_user(0);
+		$this->assertSame('unmatched', $this->sync(array($stranger))['results'][0]['outcome'], 'a deleted item comes back if B2Sign sends it again');
 	}
 
 	public function test_staff_removal_sticks(): void {

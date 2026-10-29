@@ -136,6 +136,18 @@ final class Inbox {
 		$wpdb->update(Schema::inbox(), array('state' => $state, 'confirmed' => 0, 'order_number' => '', 'message' => 'ignored' === $state ? 'Marked not ours by staff' : 'Reopened by staff', 'updated_at' => gmdate('Y-m-d H:i:s')), array('item_id' => $item_id));
 	}
 
+	/**
+	 * Staff deleted an item from the review queue or the ignored list. Linked rows stay (orders depend on them).
+	 * If B2Sign still lists the item, the extension's daily full sync adds it back as a new open row.
+	 *
+	 * @return int Rows removed.
+	 */
+	public static function delete_item(int $item_id): int {
+		global $wpdb;
+		$table = Schema::inbox();
+		return (int) $wpdb->query($wpdb->prepare("DELETE FROM `{$table}` WHERE item_id = %d AND state IN ('unmatched','needs_review','ignored')", $item_id)); // phpcs:ignore WordPress.DB.PreparedSQL
+	}
+
 	public static function get(int $id): ?array {
 		global $wpdb;
 		Schema::ensure();

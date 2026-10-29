@@ -146,6 +146,7 @@ final class Admin {
 					<option value="">Bulk actions</option>
 					<option value="confirm">Confirm suggested order</option>
 					<option value="ignore">Mark not ours</option>
+					<option value="delete">Delete</option>
 				</select>
 				<button type="button" class="button" data-sfs-bulk-apply>Apply</button>
 				<span class="description" data-sfs-bulk-count>0 selected</span>
@@ -194,11 +195,17 @@ final class Admin {
 			<details class="sfs-details">
 				<summary><?php echo esc_html(count($ignored) . ' package(s) marked not ours'); ?></summary>
 				<div class="sfs-bulk" data-sfs-bulk>
-					<input type="hidden" value="reopen" data-sfs-bulk-fixed>
-					<button type="button" class="button" data-sfs-bulk-apply>Reopen selected</button>
+					<label class="screen-reader-text" for="sfs-bulk-ignored">Bulk action</label>
+					<select id="sfs-bulk-ignored">
+						<option value="">Bulk actions</option>
+						<option value="reopen">Reopen</option>
+						<option value="delete">Delete</option>
+					</select>
+					<button type="button" class="button" data-sfs-bulk-apply>Apply</button>
 					<span class="description" data-sfs-bulk-count>0 selected</span>
 				</div>
 				<ul data-sfs-bulk-table>
+					<li><label><input type="checkbox" data-sfs-select-all> <strong>Select all</strong></label></li>
 					<?php foreach ($ignored as $row) : ?>
 						<li><label><input type="checkbox" value="<?php echo esc_attr((string) $row['id']); ?>" data-sfs-select> <?php echo esc_html(($row['record']['order_number'] ?? '') . ' · ' . ($row['record']['jobid'] ?? '') . ' · ' . ($row['record']['item_title'] ?? '')); ?></label>
 							<button type="button" class="button-link" data-sfs-action="inbox/reopen" data-id="<?php echo esc_attr((string) $row['id']); ?>">Reopen</button></li>

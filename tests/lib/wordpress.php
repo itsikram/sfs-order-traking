@@ -11,6 +11,10 @@
 
 declare(strict_types=1);
 
+if ('cli' !== PHP_SAPI) {
+	exit;
+}
+
 define('SFS_TRACKING_KEY_ID', 'sfs_testkey');
 define('SFS_TRACKING_SECRET', str_repeat('7e', 32));
 define('WP_USE_THEMES', false);

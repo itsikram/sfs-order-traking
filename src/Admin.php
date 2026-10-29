@@ -358,7 +358,8 @@ final class Admin {
 									<br><span class="description"><?php echo esc_html('b2sign' === $shipment['source'] ? 'Supplier ' . ($shipment['b2']['jobid'] ?? '') . (empty($shipment['b2']['service']) ? '' : ' · ' . $shipment['b2']['service']) : 'Added by staff'); ?></span>
 								</td>
 								<td>
-									<span class="order-badge order-badge--<?php echo esc_attr(CarrierTextNormalizer::tone((string) $shipment['status'])); ?>"><?php echo esc_html(CarrierTextNormalizer::label((string) $shipment['status'])); ?></span>
+									<?php $waiting = 'unknown' === $shipment['status'] && !(int) $shipment['last_checked_at']; ?>
+									<span class="order-badge order-badge--<?php echo esc_attr($waiting ? 'info' : CarrierTextNormalizer::tone((string) $shipment['status'])); ?>"><?php echo esc_html($waiting ? 'Waiting for first check' : CarrierTextNormalizer::label((string) $shipment['status'])); ?></span>
 									<?php if (!empty($shipment['last_event'])) : ?>
 										<br><span class="description"><?php echo esc_html(trim($shipment['last_event']['status_text'] . ' · ' . $shipment['last_event']['location_text'], ' ·')); ?></span>
 									<?php endif; ?>

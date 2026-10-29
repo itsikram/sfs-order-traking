@@ -23,8 +23,20 @@
 	// confirmation before removing the key.
 	var keyForm = document.querySelector('[data-sfs-key-form]');
 	if (keyForm) {
+		// A generated or typed key does nothing until saved: warn before leaving the page without saving.
+		var unsaved = false;
+		window.addEventListener('beforeunload', function (event) {
+			if (unsaved) {
+				event.preventDefault();
+				event.returnValue = '';
+			}
+		});
+		keyForm.addEventListener('input', function () {
+			unsaved = true;
+		});
 		var generate = keyForm.querySelector('[data-sfs-generate]');
 		generate.addEventListener('click', function () {
+			unsaved = true;
 			var secret = keyForm.querySelector('#sfs-secret');
 			keyForm.querySelector('#sfs-key-id').value = generate.getAttribute('data-key-id');
 			secret.value = generate.getAttribute('data-secret');
@@ -57,7 +69,9 @@
 			var submitter = event.submitter;
 			if (submitter && submitter.hasAttribute('data-sfs-confirm') && !window.confirm(submitter.getAttribute('data-sfs-confirm'))) {
 				event.preventDefault();
+				return;
 			}
+			unsaved = false;
 		});
 	}
 

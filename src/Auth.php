@@ -18,6 +18,8 @@ final class Auth {
 	public const FAIL_LIMIT = 10;
 	public const FAIL_WINDOW = 900;
 	public const NONCE_TTL = 600;
+	/** Last refused request (time, reason, key ID sent; never the secret), shown on Orders → Tracking sync. */
+	public const REJECT = 'sfs_trk_reject';
 
 	/**
 	 * permission_callback for the signed routes.
@@ -49,13 +51,42 @@ final class Auth {
 			if ('clock_skew' !== $error) {
 				self::fail($ip);
 			}
+			self::remember_reject($error, $headers['key']);
 			return new \WP_Error('sfs_' . $error, self::message($error), array('status' => 401, 'server_time' => $now));
 		}
 		if (!self::claim_nonce($headers['nonce'])) {
 			self::fail($ip);
 			return new \WP_Error('sfs_replay', 'This request was already used.', array('status' => 401, 'server_time' => $now));
 		}
+		if (false !== get_transient(self::REJECT)) {
+			delete_transient(self::REJECT);
+		}
 		return true;
+	}
+
+	/**
+	 * The last refused request since the last accepted one, or null.
+	 *
+	 * @return array{time:int,code:string,key_id:string}|null
+	 */
+	public static function last_reject(): ?array {
+		$reject = get_transient(self::REJECT);
+		return is_array($reject) ? $reject : null;
+	}
+
+	/** Clears every address's failed-attempt count (after the key is changed on the admin page). */
+	public static function clear_failures(): void {
+		global $wpdb;
+		$wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('_transient_sfs_trk_fail_') . '%', $wpdb->esc_like('_transient_timeout_sfs_trk_fail_') . '%'));
+		wp_cache_flush();
+	}
+
+	public static function locked(): bool {
+		return self::failures(self::ip()) >= self::FAIL_LIMIT;
+	}
+
+	private static function remember_reject(string $code, string $key_id): void {
+		set_transient(self::REJECT, array('time' => time(), 'code' => $code, 'key_id' => substr((string) preg_replace('/[^A-Za-z0-9_-]/', '', $key_id), 0, 64)), DAY_IN_SECONDS);
 	}
 
 	public static function ip(): string {

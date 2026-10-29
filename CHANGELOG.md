@@ -30,3 +30,6 @@
   migration tool; wp-config.php constants still win), and settings, carrier pages and activity folded away.
 - My Orders: a shipped order's row shows only the estimate next to its status pill (no duplicate pill); the
   shipments section has the #shipments anchor used by "Track package".
+- When the site refuses the extension, Orders → Tracking sync says why (key ID sent vs this site's, secret
+  mismatch, clock, no key); saving a key clears the failed-attempt lockout; leaving the page with a generated or
+  edited key that is not saved asks first.

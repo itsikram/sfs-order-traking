@@ -43,6 +43,7 @@ a.sfs-tile:hover, a.sfs-tile:focus { border-color: #2271b1; color: #1d2327; }
 .sfs-tile .sfs-tile__label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #646970; }
 .sfs-tile--ok { border-left-color: #00a32a; }
 .sfs-tile--warn { border-left-color: #dba617; }
+.sfs-tile--bad { border-left-color: #d63638; background: #fcf0f1; }
 .sfs-card { max-width: 1000px; margin: 20px 0; padding: 4px 20px 12px; border: 1px solid #dcdcde; border-radius: 4px; background: #fff; }
 .sfs-key-form label { display: block; margin-bottom: 4px; font-weight: 600; }
 .sfs-copy-field { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -55,3 +56,4 @@ a.sfs-tile:hover, a.sfs-tile:focus { border-color: #2271b1; color: #1d2327; }
 .sfs-fold > :last-child { margin-bottom: 16px; }
 .sfs-fold .form-table th { width: 180px; }
 .sfs-card h2 { margin: 14px 0 8px; font-size: 15px; }
+.sfs-key-form__note { padding: 8px 12px; border-left: 4px solid #dba617; background: #fcf9e8; }

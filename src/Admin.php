@@ -71,6 +71,8 @@ final class Admin {
 				self::$error = $error;
 				return;
 			}
+			Auth::clear_failures();
+			delete_transient(Auth::REJECT);
 			self::$saved = 'Key saved. Enter the same key ID and secret in the extension Options, then click Sync now.';
 			Log::add('action', 'Extension key saved (key ID ' . Keys::key_id() . ')', array('user' => get_current_user_id()));
 		} elseif (isset($_POST['sfs_settings'])) {
@@ -97,8 +99,11 @@ final class Admin {
 			}
 		}
 		$stale = $last && (int) $last['time'] < time() - (int) Settings::get('heartbeat_hours') * HOUR_IN_SECONDS;
+		$reject = Auth::last_reject();
 		if (!Keys::configured()) {
 			$connection = array('warn', 'Not connected', 'Save a key below, then enter it in the extension.');
+		} elseif ($reject && (!$last || (int) $reject['time'] > (int) $last['time'])) {
+			$connection = array('bad', 'Refused ' . human_time_diff((int) $reject['time']) . ' ago', self::reject_text($reject));
 		} elseif (!$last) {
 			$connection = array('warn', 'Waiting for the extension', 'No sync yet. Open the extension and click Sync now.');
 		} else {
@@ -156,6 +161,27 @@ final class Admin {
 			<p class="sfs-admin__msg" aria-live="polite" data-sfs-msg></p>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Why the site refused the extension, in words the owner can act on.
+	 *
+	 * @param array{code:string,key_id:string} $reject
+	 */
+	private static function reject_text(array $reject): string {
+		switch ($reject['code']) {
+			case 'bad_key':
+				return sprintf('The extension sent key ID "%s", but the key ID saved on this site is "%s". Put the same key ID and secret in both places.', '' === $reject['key_id'] ? '(empty)' : $reject['key_id'], Keys::key_id());
+			case 'bad_signature':
+				return 'The key ID matches but the secret does not. Paste the same secret in the extension Options and here.';
+			case 'clock_skew':
+				return 'The clock on the computer running Chrome is more than 5 minutes off. Fix the Windows clock, then click Sync now.';
+			case 'missing_headers':
+			case 'malformed':
+				return 'The extension did not send a key. Enter the key ID and secret in its Options.';
+			default:
+				return 'The request could not be verified. Click Sync now in the extension again.';
+		}
 	}
 
 	private static function review_queue(): void {
@@ -393,7 +419,7 @@ final class Admin {
 							<button type="submit" class="button-link sfs-danger" name="sfs_forget_key" value="1" formnovalidate data-sfs-confirm="Remove the key? The extension stops syncing with this site until a new key is saved.">Remove key</button>
 						<?php endif; ?>
 					</p>
-					<p class="description" data-sfs-key-note hidden>New key filled in. Copy both into the extension Options, then click Save key. The secret is not shown again after saving.</p>
+					<p class="sfs-key-form__note" data-sfs-key-note hidden><strong>Not active yet: click Save key.</strong> Then copy both values into the extension Options (Local profile) and click Save there. The secret is not shown again after saving.</p>
 				</form>
 			<?php endif; ?>
 		</section>

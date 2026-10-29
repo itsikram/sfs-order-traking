@@ -38,6 +38,27 @@ final class AuthSyncTest extends IntegrationCase {
 		}
 	}
 
+	public function test_a_refused_extension_is_explained_on_the_admin_page(): void {
+		delete_transient(\SFS\OrderTracking\Auth::REJECT);
+		list($status) = $this->signed('GET', '/sfs-tracking/v1/ping', '', array('x-sfs-key' => 'sfs_wrong01'));
+		$this->assertSame(401, $status);
+		$reject = \SFS\OrderTracking\Auth::last_reject();
+		$this->assertSame('bad_key', $reject['code']);
+		$this->assertSame('sfs_wrong01', $reject['key_id'], 'the key ID sent is shown, never the secret');
+		$this->assertFalse(isset($reject['secret']));
+		list($status) = $this->signed('GET', '/sfs-tracking/v1/ping');
+		$this->assertSame(200, $status);
+		$this->assertNull(\SFS\OrderTracking\Auth::last_reject(), 'cleared by the next accepted request');
+
+		for ($i = 0; $i < \SFS\OrderTracking\Auth::FAIL_LIMIT; $i++) {
+			$this->signed('GET', '/sfs-tracking/v1/ping', '', array('x-sfs-key' => 'sfs_wrong01'));
+		}
+		$this->assertTrue(\SFS\OrderTracking\Auth::locked());
+		\SFS\OrderTracking\Auth::clear_failures();
+		$this->assertFalse(\SFS\OrderTracking\Auth::locked(), 'saving a key on the page unlocks right away');
+		delete_transient(\SFS\OrderTracking\Auth::REJECT);
+	}
+
 	public function test_signatures_skew_replay_size_and_lockout(): void {
 		list($status, $data) = $this->signed('GET', '/sfs-tracking/v1/ping');
 		$this->assertSame(200, $status);

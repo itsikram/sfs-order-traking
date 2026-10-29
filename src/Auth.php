@@ -45,7 +45,10 @@ final class Auth {
 		$now = time();
 		$error = RequestSigner::verify($headers, $request->get_method(), $request->get_route(), $body, Keys::key_id(), Keys::secret(), $now);
 		if ('' !== $error) {
-			self::fail($ip);
+			// A wrong clock is not an attack: answering with the clock message beats locking the owner out.
+			if ('clock_skew' !== $error) {
+				self::fail($ip);
+			}
 			return new \WP_Error('sfs_' . $error, self::message($error), array('status' => 401, 'server_time' => $now));
 		}
 		if (!self::claim_nonce($headers['nonce'])) {

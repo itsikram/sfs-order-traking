@@ -55,9 +55,8 @@ final class Settings {
 	public static function all(): array {
 		static $cache = null;
 		$saved = get_option(self::OPTION, array());
-		$key = md5(serialize($saved));
-		if (null === $cache || $cache[0] !== $key) {
-			$cache = array($key, self::sanitize(is_array($saved) ? $saved : array()));
+		if (null === $cache || $cache[0] !== $saved) {
+			$cache = array($saved, self::sanitize(is_array($saved) ? $saved : array()));
 		}
 		return $cache[1];
 	}

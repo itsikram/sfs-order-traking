@@ -158,6 +158,10 @@ final class SyncService {
 			if ($order_id) {
 				return $this->link($order_id, $record, 'confirmed by staff');
 			}
+			// The confirmed order no longer exists: back to the review queue instead of retrying every sync.
+			if (!$this->dry) {
+				Inbox::set_state($item_id, 'unmatched');
+			}
 		}
 
 		$reasons = array();
@@ -361,6 +365,10 @@ final class SyncService {
 		}
 		if (in_array($status, Effects::CLOSED, true) && $record['packages']) {
 			$flags[] = 'the order is ' . $status . ' but the item shipped';
+		}
+		$progress = Effects::progress($order_id, $merge['shipments'], $items);
+		if ($progress['short'] && in_array($status, Effects::OPEN, true) && Settings::get('auto_ship')) {
+			$flags[] = sprintf('every linked supplier item shipped but the order has %d lines; link the rest or mark it Shipped by hand', $progress['lines']);
 		}
 
 		$outcome = $is_new_link ? 'matched' : ($merge['changed'] || $items_changed ? 'updated' : 'unchanged');

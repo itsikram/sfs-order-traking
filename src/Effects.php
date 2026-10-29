@@ -74,7 +74,15 @@ final class Effects {
 		}
 		$lines = max(1, Orders::line_count($order_id));
 		$all = $active > 0 && $shipped === $active && $shipped >= $lines;
-		return array('lines' => $lines, 'shipped' => $shipped, 'all_shipped' => $all, 'partial' => $shipped > 0 && !$all);
+		return array(
+			'lines' => $lines,
+			'shipped' => $shipped,
+			'all_shipped' => $all,
+			// Some linked supplier items have not shipped yet.
+			'partial' => $shipped > 0 && $shipped < $active,
+			// Every linked item shipped, but the order has more lines (not linked yet, or combined by the supplier).
+			'short' => $active > 0 && $shipped === $active && !$all,
+		);
 	}
 
 	/**

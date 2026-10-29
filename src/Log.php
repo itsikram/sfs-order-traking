@@ -60,8 +60,13 @@ final class Log {
 	 * The latest /sync call: the extension's heartbeat.
 	 */
 	public static function last_run(): ?array {
-		$rows = self::recent(1, array('run'));
-		return $rows[0] ?? null;
+		foreach (self::recent(50, array('run')) as $row) {
+			// Staff "Link now" runs are not the extension.
+			if ('staff' !== ($row['context']['client']['env'] ?? '')) {
+				return $row;
+			}
+		}
+		return null;
 	}
 
 	/**

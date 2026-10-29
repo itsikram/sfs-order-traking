@@ -346,7 +346,8 @@ final class PublicView {
 		$status = (string) get_post_status($order_id);
 		if ('completed' !== $status) {
 			$progress = Effects::progress($order_id, $shipments, Orders::items($order_id));
-			if ($progress['partial']) {
+			// Not every line is accounted for yet; once every package is delivered the note would only mislead.
+			if ($progress['partial'] || ($progress['short'] && !$summary['all_delivered'])) {
 				return sprintf('Partially shipped (%d of %d items)', $progress['shipped'], $progress['lines']);
 			}
 			return '';

@@ -56,11 +56,14 @@ final class Orders {
 	 * @return int[]
 	 */
 	public static function ids_by_number(string $number): array {
-		$ids = array();
-		foreach (OrderNumberExtractor::order_id_values($number) as $value) {
-			$ids = array_merge($ids, self::ids_by_meta('order_id', $value));
-		}
-		return array_values(array_unique($ids));
+		global $wpdb;
+		$values = OrderNumberExtractor::order_id_values($number);
+		$sql = $wpdb->prepare(
+			"SELECT DISTINCT pm.post_id FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			WHERE pm.meta_key = 'order_id' AND pm.meta_value IN (" . implode(',', array_fill(0, count($values), '%s')) . ") AND p.post_type = 'order' AND p.post_status IN (" . implode(',', array_fill(0, count(self::STATUSES), '%s')) . ") ORDER BY pm.post_id",
+			array_merge($values, self::STATUSES)
+		); // phpcs:ignore WordPress.DB.PreparedSQL
+		return array_map('intval', (array) $wpdb->get_col($sql)); // phpcs:ignore WordPress.DB.PreparedSQL
 	}
 
 	public static function find_by_number(string $number): int {

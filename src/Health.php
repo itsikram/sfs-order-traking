@@ -97,7 +97,11 @@ final class Health {
 		if (!$screen || !in_array($screen->id, array('dashboard', 'edit-order', 'order', 'order_page_sfs-tracking'), true)) {
 			return;
 		}
-		$problems = self::problems();
+		$problems = get_transient('sfs_trk_health');
+		if (!is_array($problems) || 'order_page_sfs-tracking' === $screen->id) {
+			$problems = self::problems();
+			set_transient('sfs_trk_health', $problems, 5 * MINUTE_IN_SECONDS);
+		}
 		if ('order_page_sfs-tracking' !== $screen->id) {
 			unset($problems['flags']);
 		}

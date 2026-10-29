@@ -1,0 +1,38 @@
+{
+  "generated_by": "node:crypto (independent of both implementations)",
+  "cases": [
+    {
+      "name": "ping, empty body",
+      "secret": "test-secret-0123456789abcdef0123456789abcdef",
+      "timestamp": "1793232000",
+      "nonce": "n0nce-0000000000000001",
+      "method": "GET",
+      "route": "/sfs-tracking/v1/ping",
+      "body": "",
+      "canonical": "1793232000\nn0nce-0000000000000001\nGET\n/sfs-tracking/v1/ping\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature": "b4e0b433881899ebd07301353a7b4f8c9609c9f3577ac16cbc5e67945333094b"
+    },
+    {
+      "name": "sync JSON body",
+      "secret": "test-secret-0123456789abcdef0123456789abcdef",
+      "timestamp": "1793232061",
+      "nonce": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "method": "POST",
+      "route": "/sfs-tracking/v1/sync",
+      "body": "{\"client\":{\"version\":\"1.0.0\",\"env\":\"local\"},\"run_id\":\"run_20261029_0001\",\"records\":[],\"carrier_results\":[]}",
+      "canonical": "1793232061\na1b2c3d4e5f60718293a4b5c6d7e8f90\nPOST\n/sfs-tracking/v1/sync\nf4f95dfc341a3a39617c44536d5afe400d2facdf303c09d2d6abc15f9c3d4fbf",
+      "signature": "53182a524c1cd7d8ab88c3b613eb5b952846bdcac727b20f6155b08ecec40a02"
+    },
+    {
+      "name": "unicode body",
+      "secret": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "timestamp": "1793232999",
+      "nonce": "Z_y-x0123456789abcdef",
+      "method": "post",
+      "route": "sfs-tracking/v1/sync/",
+      "body": "{\"jobname\":\"Café – sign ™ 12 in\"}",
+      "canonical": "1793232999\nZ_y-x0123456789abcdef\nPOST\n/sfs-tracking/v1/sync\ned4bd2b1451c8324e85cb33fd9aff619e51ae6e0306b18b0ebe2dcf89304abb0",
+      "signature": "e5c2d6a3f8762b2810406d0f2eebe8a46c9c4b7ff8b0c915ec5c780cc58bd19a"
+    }
+  ]
+}

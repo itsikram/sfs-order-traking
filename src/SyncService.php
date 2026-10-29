@@ -77,7 +77,7 @@ final class SyncService {
 				if ('record' === $rejected['type']) {
 					$results[] = array('item_id' => $rejected['item_id'], 'outcome' => 'error', 'order_number' => '', 'message' => 'Rejected: ' . $rejected['message']);
 				} else {
-					$carrier_outcomes[] = array('tracking_number' => $rejected['tracking_number'], 'outcome' => 'error', 'status' => '', 'message' => 'Rejected: ' . $rejected['message']);
+					$carrier_outcomes[] = array('carrier' => '', 'tracking_number' => $rejected['tracking_number'], 'outcome' => 'error', 'status' => '', 'message' => 'Rejected: ' . $rejected['message']);
 				}
 			}
 			foreach ($body['results'] as $result) {
@@ -230,7 +230,7 @@ final class SyncService {
 		$carrier = $result['carrier'];
 		$number = $result['tracking_number'];
 		$this->carriers[$carrier][] = $result['ok'] ? 'ok' : (string) $result['error']['code'];
-		$out = array('tracking_number' => $number, 'outcome' => 'discarded', 'status' => '', 'message' => 'Not a package on any order.');
+		$out = array('carrier' => $carrier, 'tracking_number' => $number, 'outcome' => 'discarded', 'status' => '', 'message' => 'Not a package on any order.');
 		$key = ShipmentMerger::key($carrier, $number);
 		$minutes = Settings::check_minutes();
 

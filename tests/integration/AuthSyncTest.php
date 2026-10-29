@@ -272,6 +272,56 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertCount(1, Orders::shipments($confirm_order['id']));
 	}
 
+	public function test_in_production_before_any_tracking_number_then_shipped(): void {
+		$order = $this->order(array('status' => 'pending'));
+		$record = $this->record(array('status' => 'awaiting_artwork', 'packages' => array()));
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $record['order_number']);
+		$this->assertSame('matched', $this->sync(array($record))['results'][0]['outcome']);
+		clean_post_cache($order['id']);
+		$this->assertSame('pending', get_post_status($order['id']), 'artwork not approved yet: still Pending review');
+
+		$record['status'] = 'printing';
+		$this->sync(array($record));
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']), 'In production with no tracking number');
+		$this->assertSame(array(), Orders::shipments($order['id']));
+		$this->assertSame('printing', Orders::items($order['id'])[(int) $record['item_id']]['status']);
+
+		$this->settings(array('dry_run' => true));
+		$other = $this->order(array('status' => 'pending'));
+		$dry = $this->record(array('status' => 'printing', 'packages' => array()));
+		add_post_meta($other['id'], Orders::META_B2_ORDER, $dry['order_number']);
+		$this->assertStringContains('In production', $this->sync(array($dry))['results'][0]['message']);
+		clean_post_cache($other['id']);
+		$this->assertSame('pending', get_post_status($other['id']), 'dry run only says what it would do');
+		$this->settings(array('dry_run' => false));
+
+		$shipped = $this->record(array('order_number' => $record['order_number'], 'item_id' => $record['item_id']));
+		$this->sync(array($shipped));
+		clean_post_cache($order['id']);
+		$this->assertSame('completed', get_post_status($order['id']), 'Shipped once the tracking number shows up');
+		$this->assertCount(1, Orders::shipments($order['id']));
+	}
+
+	public function test_typed_b2_number_without_a_stored_record_is_requested_from_the_extension(): void {
+		$order = $this->order();
+		$record = $this->record();
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $record['order_number']);
+		$this->assertContains($record['order_number'], $this->sync()['want_b2'], 'typed but never received');
+		$data = $this->sync(array($record));
+		$this->assertSame('matched', $data['results'][0]['outcome']);
+		$this->assertNotContains($record['order_number'], $data['want_b2'], 'linked: no longer wanted');
+
+		$queued = $this->record(array('ship_to' => array('fullname' => 'Queue Person', 'company' => '', 'city' => 'Z', 'state' => 'ZZ', 'zipcode' => '00007')));
+		$this->sync(array($queued));
+		$late = $this->order();
+		add_post_meta($late['id'], Orders::META_B2_ORDER, $queued['order_number']);
+		$this->assertNotContains($queued['order_number'], Orders::wanted_b2_numbers(), 'stored on the site: linked from the queue, no resend needed');
+		$cancelled = $this->order(array('status' => 'cancelled'));
+		add_post_meta($cancelled['id'], Orders::META_B2_ORDER, self::b2_number());
+		$this->assertNotContains(Orders::b2_numbers($cancelled['id'])[0], Orders::wanted_b2_numbers(), 'cancelled orders are not chased');
+	}
+
 	public function test_review_queue_bulk_actions(): void {
 		$order = $this->order(array('fname' => 'Bulky', 'lname' => 'Bulkerson', 'company' => 'Bulk Signs', 'zip' => '70888', 'city' => 'Bulkton'));
 		$suggested = $this->record(array('ship_to' => array('fullname' => 'Bulky Bulkerson', 'company' => 'Bulk Signs LLC', 'city' => 'Bulkton', 'state' => 'LA', 'zipcode' => '70888')));

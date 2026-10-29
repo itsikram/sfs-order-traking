@@ -161,6 +161,31 @@ final class Orders {
 	}
 
 	/**
+	 * B2Sign order numbers staff typed on open or shipped orders that the site has no supplier record for yet: never
+	 * sent, deleted from the review queue, or acknowledged before the number was typed. The sync answer asks the
+	 * extension to send these items again right away, so typing the number is enough.
+	 *
+	 * @return string[]
+	 */
+	public static function wanted_b2_numbers(int $limit = 100): array {
+		global $wpdb;
+		$statuses = array_merge(Effects::OPEN, array('completed'));
+		$in = implode(',', array_fill(0, count($statuses), '%s'));
+		$rows = (array) $wpdb->get_results($wpdb->prepare(
+			"SELECT pm.post_id, pm.meta_value FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			WHERE pm.meta_key = %s AND p.post_type = 'order' AND p.post_status IN ({$in}) ORDER BY p.post_date DESC LIMIT %d",
+			array_merge(array(self::META_B2_ORDER), $statuses, array($limit))
+		), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL
+		$wanted = array();
+		foreach ($rows as $row) {
+			if (!in_array($row['meta_value'], array_column(self::items((int) $row['post_id']), 'b2_order'), true)) {
+				$wanted[(string) $row['meta_value']] = true;
+			}
+		}
+		return $wanted ? array_values(array_diff(array_keys($wanted), Inbox::stored_b2_numbers(array_keys($wanted)))) : array();
+	}
+
+	/**
 	 * @param string[] $numbers Validated B2Sign order numbers.
 	 * @return bool True when the list changed.
 	 */

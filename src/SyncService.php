@@ -93,6 +93,7 @@ final class SyncService {
 				'results' => $results,
 				'carrier_outcomes' => $carrier_outcomes,
 				'checks' => $checks,
+				'want_b2' => Orders::wanted_b2_numbers(),
 				'server_time' => $now,
 				'dry_run' => $run->dry,
 				'settings' => array(

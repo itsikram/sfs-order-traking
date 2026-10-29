@@ -1,7 +1,7 @@
 <?php
 /**
  * What a sync may do to an order besides storing tracking: mark it Shipped (owner decision: yes, after a dry run),
- * mark it In production (off), and the optional extra-package email. Status changes go through wp_update_post(), so
+ * mark it In production (on since 2026-10-29), and the optional extra-package email. Status changes go through wp_update_post(), so
  * the theme's status log and its single shipped email run exactly as when staff change the status.
  *
  * @package sfs-order-tracking

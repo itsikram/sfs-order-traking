@@ -82,6 +82,16 @@ abstract class TestCase {
 		}
 	}
 
+	/**
+	 * @param mixed $needle
+	 */
+	protected function assertNotContains($needle, array $haystack, string $message = ''): void {
+		$this->assertions++;
+		if (in_array($needle, $haystack, true)) {
+			$this->fail(($message ? $message . "\n" : '') . self::export($needle) . ' found in ' . self::export($haystack));
+		}
+	}
+
 	protected function assertStringContains(string $needle, string $haystack, string $message = ''): void {
 		$this->assertions++;
 		if (false === strpos($haystack, $needle)) {

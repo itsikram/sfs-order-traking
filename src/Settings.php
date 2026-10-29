@@ -16,6 +16,9 @@ use SFS\OrderTracking\Core\LocationPolicy;
 final class Settings {
 	public const OPTION = 'sfs_tracking_settings';
 
+	/** B2Sign statuses meaning the supplier has started or finished the item (seen: printing, shipped, completed). */
+	public const DEFAULT_PRODUCTION = array('printing', 'printed', 'in_production', 'production', 'processing', 'cutting', 'laminating', 'finishing', 'packing', 'packaging', 'quality_check', 'ready_to_ship', 'shipped', 'completed');
+
 	/** Ranges for the numeric settings: key => [min, max, default]. */
 	private const NUMBERS = array(
 		'interval_min' => array(5, 60, 10),
@@ -41,7 +44,8 @@ final class Settings {
 			'staff_exception_email' => true,
 			'staff_health_email' => true,
 			'staff_email' => '',
-			'auto_production' => false,
+			// Owner request 2026-10-29: move Pending review orders to In production from the supplier status.
+			'auto_production' => true,
 			'production_statuses' => '',
 			'auto_apply_fuzzy' => false,
 			'delete_on_uninstall' => false,
@@ -98,12 +102,14 @@ final class Settings {
 	}
 
 	/**
-	 * B2Sign item statuses that mean "in production" (only used when auto_production is on).
+	 * B2Sign item statuses that mean "in production" (only used when auto_production is on). An empty setting uses
+	 * DEFAULT_PRODUCTION. Shipped items count too: shipped without a tracking number yet still means made.
 	 *
 	 * @return string[]
 	 */
 	public static function production_statuses(): array {
-		return array_values(array_filter(array_map('trim', explode(',', (string) self::get('production_statuses')))));
+		$saved = array_values(array_filter(array_map('trim', explode(',', (string) self::get('production_statuses')))));
+		return $saved ?: self::DEFAULT_PRODUCTION;
 	}
 
 	public static function staff_email(): string {

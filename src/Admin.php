@@ -294,8 +294,8 @@ final class Admin {
 				</td></tr>
 				<tr><th scope="row">Order status</th><td>
 					<?php $checkbox('auto_ship', 'Mark the order Shipped when every item has shipped', 'Sends the existing shipped email once. Never for cancelled, refunded or failed orders.'); ?><br>
-					<?php $checkbox('auto_production', 'Mark In production from the supplier status', 'Needs the supplier statuses below.'); ?>
-					<p><label>Supplier statuses meaning "in production" <input type="text" name="sfs_settings[production_statuses]" value="<?php echo esc_attr($s['production_statuses']); ?>" class="regular-text" placeholder="e.g. in_production, printing"></label></p>
+					<?php $checkbox('auto_production', 'Mark In production from the supplier status', 'Moves a Pending review order to In production (the customer gets the in-production email) once B2Sign starts the item. Works before there is a tracking number.'); ?>
+					<p><label>Supplier statuses meaning "in production" <input type="text" name="sfs_settings[production_statuses]" value="<?php echo esc_attr($s['production_statuses']); ?>" class="regular-text" placeholder="<?php echo esc_attr(implode(', ', Settings::DEFAULT_PRODUCTION)); ?>"></label> <span class="description">Leave empty to use the list shown.</span></p>
 				</td></tr>
 				<tr><th scope="row">Customer emails</th><td>
 					<?php $checkbox('email_delivered', 'Email when a package is delivered'); ?><br>

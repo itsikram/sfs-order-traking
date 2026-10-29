@@ -137,6 +137,23 @@ final class Inbox {
 	}
 
 	/**
+	 * Which of these B2Sign order numbers have at least one stored row (any state).
+	 *
+	 * @param string[] $b2_numbers
+	 * @return string[]
+	 */
+	public static function stored_b2_numbers(array $b2_numbers): array {
+		global $wpdb;
+		if (!$b2_numbers) {
+			return array();
+		}
+		Schema::ensure();
+		$table = Schema::inbox();
+		$in = implode(',', array_fill(0, count($b2_numbers), '%s'));
+		return array_map('strval', (array) $wpdb->get_col($wpdb->prepare("SELECT DISTINCT b2_order_number FROM `{$table}` WHERE b2_order_number IN ({$in})", array_values($b2_numbers)))); // phpcs:ignore WordPress.DB.PreparedSQL
+	}
+
+	/**
 	 * Staff deleted an item from the review queue or the ignored list. Linked rows stay (orders depend on them).
 	 * If B2Sign still lists the item, the extension's daily full sync adds it back as a new open row.
 	 *

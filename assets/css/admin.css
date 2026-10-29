@@ -32,3 +32,6 @@
 .sfs-events-row td { padding-top: 0; }
 .sfs-admin-events { margin: 6px 0 0 18px; }
 .sfs-items { margin: 4px 0 0 18px; list-style: disc; }
+.sfs-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
+.sfs-table .check-column { width: 2.2em; padding-left: 8px; }
+.sfs-table tr.is-selected td, .sfs-table tr.is-selected th { background: #f0f6fc; }

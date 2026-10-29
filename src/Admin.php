@@ -140,14 +140,25 @@ final class Admin {
 		<?php if (!$items) : ?>
 			<p>Nothing to review.</p>
 		<?php else : ?>
-			<table class="widefat striped sfs-table">
-				<thead><tr><th>Supplier item</th><th>Ship to</th><th>Packages</th><th>Suggested orders</th><th>Action</th></tr></thead>
+			<div class="sfs-bulk" data-sfs-bulk>
+				<label class="screen-reader-text" for="sfs-bulk-action">Bulk action</label>
+				<select id="sfs-bulk-action">
+					<option value="">Bulk actions</option>
+					<option value="confirm">Confirm suggested order</option>
+					<option value="ignore">Mark not ours</option>
+				</select>
+				<button type="button" class="button" data-sfs-bulk-apply>Apply</button>
+				<span class="description" data-sfs-bulk-count>0 selected</span>
+			</div>
+			<table class="widefat striped sfs-table" data-sfs-bulk-table>
+				<thead><tr><td class="check-column"><label class="screen-reader-text" for="sfs-select-all">Select all</label><input type="checkbox" id="sfs-select-all" data-sfs-select-all></td><th>Supplier item</th><th>Ship to</th><th>Packages</th><th>Suggested orders</th><th>Action</th></tr></thead>
 				<tbody>
 					<?php foreach ($items as $row) :
 						$record = $row['record'];
 						$to = (array) ($record['ship_to'] ?? array());
 						?>
 						<tr data-sfs-row="<?php echo esc_attr((string) $row['id']); ?>">
+							<th scope="row" class="check-column"><label class="screen-reader-text" for="sfs-row-<?php echo esc_attr((string) $row['id']); ?>">Select <?php echo esc_attr($record['jobid'] ?? ''); ?></label><input type="checkbox" id="sfs-row-<?php echo esc_attr((string) $row['id']); ?>" value="<?php echo esc_attr((string) $row['id']); ?>" data-sfs-select<?php echo $row['candidates'] ? '' : ' data-no-suggestion="1"'; ?>></th>
 							<td>
 								<strong><?php echo esc_html(($record['order_number'] ?? '') . ' · ' . ($record['jobid'] ?? '')); ?></strong>
 								<span class="sfs-state sfs-state--<?php echo esc_attr($row['state']); ?>"><?php echo esc_html('needs_review' === $row['state'] ? 'Needs review' : 'Unmatched'); ?></span><br>
@@ -182,9 +193,14 @@ final class Admin {
 			?>
 			<details class="sfs-details">
 				<summary><?php echo esc_html(count($ignored) . ' package(s) marked not ours'); ?></summary>
-				<ul>
+				<div class="sfs-bulk" data-sfs-bulk>
+					<input type="hidden" value="reopen" data-sfs-bulk-fixed>
+					<button type="button" class="button" data-sfs-bulk-apply>Reopen selected</button>
+					<span class="description" data-sfs-bulk-count>0 selected</span>
+				</div>
+				<ul data-sfs-bulk-table>
 					<?php foreach ($ignored as $row) : ?>
-						<li><?php echo esc_html(($row['record']['order_number'] ?? '') . ' · ' . ($row['record']['jobid'] ?? '') . ' · ' . ($row['record']['item_title'] ?? '')); ?>
+						<li><label><input type="checkbox" value="<?php echo esc_attr((string) $row['id']); ?>" data-sfs-select> <?php echo esc_html(($row['record']['order_number'] ?? '') . ' · ' . ($row['record']['jobid'] ?? '') . ' · ' . ($row['record']['item_title'] ?? '')); ?></label>
 							<button type="button" class="button-link" data-sfs-action="inbox/reopen" data-id="<?php echo esc_attr((string) $row['id']); ?>">Reopen</button></li>
 					<?php endforeach; ?>
 				</ul>

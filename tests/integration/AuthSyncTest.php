@@ -272,6 +272,41 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertCount(1, Orders::shipments($confirm_order['id']));
 	}
 
+	public function test_review_queue_bulk_actions(): void {
+		$order = $this->order(array('fname' => 'Bulky', 'lname' => 'Bulkerson', 'company' => 'Bulk Signs', 'zip' => '70888', 'city' => 'Bulkton'));
+		$suggested = $this->record(array('ship_to' => array('fullname' => 'Bulky Bulkerson', 'company' => 'Bulk Signs LLC', 'city' => 'Bulkton', 'state' => 'LA', 'zipcode' => '70888')));
+		$stranger = $this->record(array('ship_to' => array('fullname' => 'Nobody Bulk', 'company' => '', 'city' => 'Nowhere', 'state' => 'ZZ', 'zipcode' => '00006')));
+		$this->sync(array($suggested, $stranger));
+		$suggested_row = (int) Inbox::item_rows((int) $suggested['item_id'])[0]['id'];
+		$stranger_row = (int) Inbox::item_rows((int) $stranger['item_id'])[0]['id'];
+		$bulk = static function (string $action, array $ids): \WP_REST_Response {
+			$request = new \WP_REST_Request('POST', '/sfs-tracking/v1/admin/inbox/bulk');
+			$request->set_param('action', $action);
+			$request->set_param('ids', $ids);
+			return rest_do_request($request);
+		};
+
+		$this->assertTrue(in_array($bulk('ignore', array($stranger_row))->get_status(), array(401, 403), true), 'staff only');
+		$this->assertSame('unmatched', Inbox::item_rows((int) $stranger['item_id'])[0]['state']);
+
+		wp_set_current_user(get_users(array('role' => 'administrator', 'number' => 1))[0]->ID);
+		$response = $bulk('confirm', array($suggested_row, $stranger_row, $suggested_row, 999999999));
+		$data = $response->get_data();
+		$this->assertSame(200, $response->get_status(), wp_json_encode($data));
+		$this->assertSame(1, $data['done']);
+		$this->assertSame(1, $data['skipped'], 'no suggestion is skipped, a missing id is ignored');
+		$this->assertStringContains('no suggested order', $data['message']);
+		$this->assertSame('linked', Inbox::item_rows((int) $suggested['item_id'])[0]['state']);
+		$this->assertCount(1, Orders::shipments($order['id']));
+
+		$this->assertSame(1, $bulk('ignore', array($stranger_row))->get_data()['done']);
+		$this->assertSame('ignored', Inbox::item_rows((int) $stranger['item_id'])[0]['state']);
+		$this->assertSame(1, $bulk('reopen', array($stranger_row))->get_data()['done']);
+		$this->assertSame('unmatched', Inbox::item_rows((int) $stranger['item_id'])[0]['state']);
+		$this->assertSame(400, $bulk('delete', array($stranger_row))->get_status(), 'unknown actions are refused');
+		wp_set_current_user(0);
+	}
+
 	public function test_staff_removal_sticks(): void {
 		$order = $this->order(array('items' => array('A', 'B')));
 		$record = $this->record(array('ship_to' => array('fullname' => 'Removal Case', 'company' => '', 'city' => 'Q', 'state' => 'ZZ', 'zipcode' => '00005')));

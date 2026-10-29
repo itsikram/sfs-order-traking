@@ -52,6 +52,84 @@
 		});
 	}
 
+	// Review queue bulk actions: each bar works on the checkboxes in the table or list right after it.
+	document.querySelectorAll('[data-sfs-bulk]').forEach(function (bar) {
+		var table = bar.nextElementSibling;
+		if (!table || !table.hasAttribute('data-sfs-bulk-table')) {
+			return;
+		}
+		var all = table.querySelector('[data-sfs-select-all]');
+		var count = bar.querySelector('[data-sfs-bulk-count]');
+		var boxes = function () {
+			return Array.prototype.slice.call(table.querySelectorAll('[data-sfs-select]'));
+		};
+		var chosen = function () {
+			return boxes().filter(function (box) {
+				return box.checked;
+			});
+		};
+		var refresh = function () {
+			var n = chosen().length;
+			count.textContent = n + ' selected';
+			boxes().forEach(function (box) {
+				var row = box.closest('tr');
+				if (row) {
+					row.classList.toggle('is-selected', box.checked);
+				}
+			});
+			if (all) {
+				all.checked = n > 0 && n === boxes().length;
+				all.indeterminate = n > 0 && n < boxes().length;
+			}
+		};
+		table.addEventListener('change', function (event) {
+			if (all && event.target === all) {
+				boxes().forEach(function (box) {
+					box.checked = all.checked;
+				});
+			}
+			refresh();
+		});
+		bar.querySelector('[data-sfs-bulk-apply]').addEventListener('click', function () {
+			var fixed = bar.querySelector('[data-sfs-bulk-fixed]');
+			var select = bar.querySelector('select');
+			var action = fixed ? fixed.value : select.value;
+			var ids = chosen().map(function (box) {
+				return Number(box.value);
+			});
+			if (!action) {
+				message(bar, 'Choose a bulk action first.', true);
+				return;
+			}
+			if (!ids.length) {
+				message(bar, 'Select at least one item.', true);
+				return;
+			}
+			if (action === 'confirm') {
+				var none = chosen().filter(function (box) {
+					return box.hasAttribute('data-no-suggestion');
+				}).length;
+				var text = 'Link ' + ids.length + ' supplier item(s) to their suggested orders?' + (none ? ' ' + none + ' without a suggestion will be skipped.' : '') + ' Orders whose items have all shipped are marked Shipped and emailed (unless dry run is on).';
+				if (!window.confirm(text)) {
+					return;
+				}
+			}
+			var apply = bar.querySelector('[data-sfs-bulk-apply]');
+			apply.disabled = true;
+			message(bar, 'Working on ' + ids.length + ' item(s)…', false);
+			call('inbox/bulk', 'POST', { action: action, ids: ids }).then(function (data) {
+				message(bar, data.message || 'Done.', false);
+				window.setTimeout(function () {
+					window.location.reload();
+				}, data.skipped ? 4000 : 1500);
+			}).catch(function (error) {
+				message(bar, error.message, true);
+				apply.disabled = false;
+			});
+		});
+		refresh();
+	});
+
 	document.addEventListener('click', function (event) {
 		var button = event.target.closest ? event.target.closest('[data-sfs-action]') : null;
 		if (!button) {

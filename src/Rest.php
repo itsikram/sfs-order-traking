@@ -61,6 +61,15 @@ final class Rest {
 			'permission_callback' => array(self::class, 'can_edit_order'),
 			'args' => $order_arg,
 		));
+		register_rest_route(self::NS, '/admin/inbox/bulk', array(
+			'methods' => 'POST',
+			'callback' => array(self::class, 'inbox_bulk'),
+			'permission_callback' => array(self::class, 'can_review'),
+			'args' => array(
+				'action' => array('type' => 'string', 'required' => true, 'enum' => array('confirm', 'ignore', 'reopen')),
+				'ids' => array('type' => 'array', 'required' => true, 'items' => array('type' => 'integer', 'minimum' => 1), 'maxItems' => 100),
+			),
+		));
 		register_rest_route(self::NS, '/admin/inbox/(?P<action>confirm|ignore|reopen)', array(
 			'methods' => 'POST',
 			'callback' => array(self::class, 'inbox_action'),
@@ -201,29 +210,75 @@ final class Rest {
 		if (!$row) {
 			return new \WP_Error('sfs_no_row', 'That review item no longer exists.', array('status' => 404));
 		}
-		$item_id = (int) $row['item_id'];
-		switch ($request->get_param('action')) {
-			case 'ignore':
-				Inbox::set_state($item_id, 'ignored');
-				Log::add('action', 'Supplier item marked not ours', array('item' => $item_id));
-				return array('ok' => true, 'message' => 'Marked not ours. It will not be matched again.');
-			case 'reopen':
-				Inbox::set_state($item_id, 'unmatched');
-				return array('ok' => true, 'message' => 'Back in the review queue.');
+		$done = self::apply_inbox($row, (string) $request->get_param('action'), (string) $request->get_param('order_number'));
+		return $done['ok'] ? $done : new \WP_Error('sfs_inbox_action', $done['message'], array('status' => $done['status']));
+	}
+
+	/**
+	 * Bulk actions in the review queue: confirm each item's top suggested order, mark not ours, or reopen.
+	 *
+	 * @return array{ok:bool,done:int,skipped:int,message:string,details:string[]}
+	 */
+	public static function inbox_bulk(\WP_REST_Request $request): array {
+		$action = (string) $request->get_param('action');
+		$done = 0;
+		$details = array();
+		foreach (array_slice(array_unique(array_map('intval', (array) $request->get_param('ids'))), 0, 100) as $id) {
+			$row = Inbox::get($id);
+			if (!$row) {
+				continue;
+			}
+			$label = ($row['record']['jobid'] ?? '') ?: ($row['record']['order_number'] ?? '#' . $id);
+			if ('confirm' === $action) {
+				$top = $row['candidates'][0]['order_number'] ?? '';
+				if ('' === $top) {
+					$details[] = $label . ': no suggested order, skipped';
+					continue;
+				}
+				$result = self::apply_inbox($row, 'confirm', (string) $top);
+			} else {
+				$result = self::apply_inbox($row, $action, '');
+			}
+			if ($result['ok']) {
+				$done++;
+			} else {
+				$details[] = $label . ': ' . $result['message'];
+			}
 		}
-		$number = (string) preg_replace('/^#?(order_)?/i', '', trim((string) $request->get_param('order_number')));
+		$words = array('confirm' => 'confirmed', 'ignore' => 'marked not ours', 'reopen' => 'reopened');
+		$message = sprintf('%d item(s) %s.', $done, $words[$action] ?? $action) . ($details ? ' Skipped: ' . implode('; ', $details) . '.' : '');
+		return array('ok' => true, 'done' => $done, 'skipped' => count($details), 'message' => $message, 'details' => $details);
+	}
+
+	/**
+	 * One review-queue action on one item.
+	 *
+	 * @return array{ok:bool,message:string,status:int}
+	 */
+	private static function apply_inbox(array $row, string $action, string $order_number): array {
+		$item_id = (int) $row['item_id'];
+		if ('ignore' === $action) {
+			Inbox::set_state($item_id, 'ignored');
+			Log::add('action', 'Supplier item marked not ours', array('item' => $item_id));
+			return array('ok' => true, 'message' => 'Marked not ours. It will not be matched again.', 'status' => 200);
+		}
+		if ('reopen' === $action) {
+			Inbox::set_state($item_id, 'unmatched');
+			return array('ok' => true, 'message' => 'Back in the review queue.', 'status' => 200);
+		}
+		$number = (string) preg_replace('/^#?(order_)?/i', '', trim($order_number));
 		$order_id = Orders::find_by_number(strtoupper($number));
 		if (!$order_id) {
-			return new \WP_Error('sfs_no_order', 'No single order has that number.', array('status' => 404));
+			return array('ok' => false, 'message' => 'No single order has that number.', 'status' => 404);
 		}
 		if (!current_user_can('edit_post', $order_id)) {
-			return new \WP_Error('sfs_forbidden', 'You cannot edit that order.', array('status' => 403));
+			return array('ok' => false, 'message' => 'You cannot edit that order.', 'status' => 403);
 		}
 		$number = Orders::number($order_id);
 		Inbox::confirm($item_id, $number);
 		Log::add('action', 'Staff confirmed supplier item for order #' . $number, array('order' => $number, 'item' => $item_id));
 		$results = SyncService::link_order($order_id, array($item_id));
 		$message = is_wp_error($results) || !$results ? 'Confirmed. It links on the next sync.' : $results[0]['message'];
-		return array('ok' => true, 'message' => 'Confirmed for order #' . $number . '. ' . $message);
+		return array('ok' => true, 'message' => 'Confirmed for order #' . $number . '. ' . $message, 'status' => 200);
 	}
 }

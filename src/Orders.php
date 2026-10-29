@@ -32,7 +32,7 @@ final class Orders {
 	public const META_AUTO_SHIPPED = '_sfs_auto_shipped';
 
 	/** Statuses the theme defines; posts in any other state (trash, drafts) are never touched. */
-	public const STATUSES = array('pending', 'processing', 'on-hold', 'on_hold', 'completed', 'cancelled', 'refunded', 'failed');
+	public const STATUSES = array('pending', 'processing', 'finishing', 'ready-for-pickup', 'on-hold', 'on_hold', 'completed', 'in-transit', 'out-for-delivery', 'delivered', 'delivery-issue', 'returned', 'cancelled', 'refunded', 'failed');
 
 	/**
 	 * Post IDs of orders with a meta row of this value.
@@ -169,7 +169,7 @@ final class Orders {
 	 */
 	public static function wanted_b2_numbers(int $limit = 100): array {
 		global $wpdb;
-		$statuses = array_merge(Effects::OPEN, array('completed'));
+		$statuses = array_merge(Effects::OPEN, Effects::SHIPPED);
 		$in = implode(',', array_fill(0, count($statuses), '%s'));
 		$rows = (array) $wpdb->get_results($wpdb->prepare(
 			"SELECT pm.post_id, pm.meta_value FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
@@ -282,7 +282,7 @@ final class Orders {
 	public static function candidates(int $purchase_time): array {
 		$ids = get_posts(array(
 			'post_type' => 'order',
-			'post_status' => array('pending', 'processing', 'on-hold', 'on_hold', 'completed'),
+			'post_status' => array_merge(Effects::OPEN, Effects::SHIPPED),
 			'date_query' => array(array(
 				'column' => 'post_date_gmt',
 				'after' => gmdate('Y-m-d H:i:s', $purchase_time - 21 * DAY_IN_SECONDS),

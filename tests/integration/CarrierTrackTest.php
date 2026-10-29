@@ -6,6 +6,7 @@ namespace SFS\OrderTracking\Tests\Integration;
 require_once __DIR__ . '/IntegrationCase.php';
 
 use SFS\OrderTracking\Core\TokenSigner;
+use SFS\OrderTracking\Effects;
 use SFS\OrderTracking\Keys;
 use SFS\OrderTracking\Log;
 use SFS\OrderTracking\Orders;
@@ -64,10 +65,13 @@ final class CarrierTrackTest extends IntegrationCase {
 		$this->settings(array('dry_run' => false));
 		$data = $this->sync(array(), array($this->carrier_result('ups', $tn)));
 		$this->assertStringContains('Did: mark Shipped', $data['carrier_outcomes'][0]['message']);
+		$this->assertStringContains('mark In transit', $data['carrier_outcomes'][0]['message']);
 		clean_post_cache($order['id']);
-		$this->assertSame('completed', get_post_status($order['id']), 'staff-typed tracking number, carrier has it: Shipped');
+		$this->assertSame('in-transit', get_post_status($order['id']), 'staff-typed tracking number, carrier has it: Shipped, then In transit');
 		sfs_test_flush_status_emails();
-		$this->assertCount(1, $this->mails_to($order['email']), 'one shipped email');
+		$mails = $this->mails_to($order['email']);
+		$this->assertCount(1, $mails, 'one shipped email');
+		$this->assertStringContains('has shipped', $mails[0]['subject']);
 
 		wp_update_post(array('ID' => $order['id'], 'post_status' => 'processing'));
 		sfs_test_flush_status_emails();
@@ -86,6 +90,75 @@ final class CarrierTrackTest extends IntegrationCase {
 		$this->sync(array(), array($this->carrier_result('ups', $other)));
 		clean_post_cache($waiting['id']);
 		$this->assertSame('processing', get_post_status($waiting['id']), 'a linked supplier item is still printing');
+	}
+
+	public function test_order_status_follows_the_supplier_and_the_carrier(): void {
+		$this->settings(array('dry_run' => false));
+		$this->assertSame('finishing', Effects::b2_stage('Trimming'));
+		$this->assertSame('ready-for-pickup', Effects::b2_stage('ready_for_pickup'));
+		$this->assertSame('processing', Effects::b2_stage('Awaiting Staff Approval'));
+		$this->assertSame('action', Effects::b2_stage('Awaiting Customer Approval'));
+		$this->assertSame('action', Effects::b2_stage('on_hold'));
+		$this->assertSame('shipped', Effects::b2_stage('Completed'));
+		$this->assertSame('refund', Effects::b2_stage('Awaiting Refund'));
+
+		// Supplier stages: forward only, and never while the supplier waits on us.
+		$order = $this->order(array('status' => 'pending'));
+		$item = $this->record(array('status' => 'Awaiting Customer Approval', 'packages' => array()));
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $item['order_number']);
+		$this->sync(array($item));
+		clean_post_cache($order['id']);
+		$this->assertSame('pending', get_post_status($order['id']), 'the supplier waits on us: no change');
+		$this->sync(array(array('status' => 'printing') + $item));
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']));
+		$this->sync(array(array('status' => 'trimming') + $item));
+		clean_post_cache($order['id']);
+		$this->assertSame('finishing', get_post_status($order['id']));
+		$this->sync(array(array('status' => 'printing') + $item));
+		clean_post_cache($order['id']);
+		$this->assertSame('finishing', get_post_status($order['id']), 'never backwards');
+		sfs_test_flush_status_emails();
+		$GLOBALS['sfs_test_mail'] = array();
+
+		// Carrier stages on a shipped order, one shipped email in all.
+		list($shipped, , $tn) = $this->shipped_order();
+		$reading = function (string $headline, int $age) use ($tn): array {
+			return $this->carrier_result('ups', $tn, array('headline' => $headline, 'stepper' => array(array('label' => $headline, 'active' => true)), 'checked_at' => gmdate('Y-m-d\TH:i:s\Z', time() - $age)));
+		};
+		$this->sync(array(), array($reading('On the Way', 50)));
+		clean_post_cache($shipped['id']);
+		$this->assertSame('in-transit', get_post_status($shipped['id']));
+		$this->sync(array(), array($reading('Out for Delivery Today', 40)));
+		clean_post_cache($shipped['id']);
+		$this->assertSame('out-for-delivery', get_post_status($shipped['id']));
+		$this->sync(array(), array($reading('Delivered', 30)));
+		clean_post_cache($shipped['id']);
+		$this->assertSame('delivered', get_post_status($shipped['id']));
+		$this->assertStringContains('Delivered', wholesale_order_status_badge('delivered', $shipped['id']));
+		sfs_test_flush_status_emails();
+		$this->assertCount(0, $this->mails_to($shipped['email']), 'the shipped email went out when it shipped; stages send none');
+
+		// Staff changed it by hand: the sync leaves it until the packages show something new.
+		wp_update_post(array('ID' => $shipped['id'], 'post_status' => 'completed'));
+		$this->sync();
+		clean_post_cache($shipped['id']);
+		$this->assertSame('completed', get_post_status($shipped['id']), 'staff choice kept');
+		sfs_test_flush_status_emails();
+
+		// Straight from In production to Delivered: one delivered email with the tracking number.
+		$late = $this->order();
+		$late_tn = self::ups();
+		Orders::save_shipments($late['id'], \SFS\OrderTracking\OrderHooks::with_manual(array(), 'ups', $late_tn, true));
+		$GLOBALS['sfs_test_mail'] = array();
+		$this->sync(array(), array($this->carrier_result('ups', $late_tn, array('headline' => 'Delivered', 'stepper' => array(array('label' => 'Delivered', 'active' => true))))));
+		clean_post_cache($late['id']);
+		$this->assertSame('delivered', get_post_status($late['id']));
+		sfs_test_flush_status_emails();
+		$mails = $this->mails_to($late['email']);
+		$this->assertCount(1, $mails);
+		$this->assertStringContains('was delivered', $mails[0]['subject']);
+		$this->assertStringContains($late_tn, $mails[0]['message']);
 	}
 
 	public function test_carrier_reading_merges_once_and_schedules(): void {

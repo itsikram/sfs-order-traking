@@ -317,19 +317,21 @@ final class SyncService {
 
 	/**
 	 * Keeps the order status in step with what is already stored, on every sync: open orders whose supplier items
-	 * all shipped, or whose packages are moving, become Shipped; Pending review orders the supplier started become
-	 * In production. Catches orders whose data arrived before a rule applied, or across several syncs. Forward
-	 * only, never twice (staff can move an order back), nothing written in dry run.
+	 * all shipped, or whose packages are moving, become Shipped; open orders follow the supplier stage (In production,
+	 * Finishing, Ready for pickup); shipped orders follow their packages (In transit ... Delivered). Catches orders
+	 * whose data arrived before a rule applied, or across several syncs. Never twice (staff can move an order
+	 * back), nothing written in dry run.
 	 *
 	 * @return array<int,string[]> order_id => applied plans
 	 */
 	public function reconcile(int $limit = 100): array {
 		global $wpdb;
-		$in = implode(',', array_fill(0, count(Effects::OPEN), '%s'));
+		$statuses = array_merge(Effects::OPEN, Effects::SHIPPED);
+		$in = implode(',', array_fill(0, count($statuses), '%s'));
 		$ids = (array) $wpdb->get_col($wpdb->prepare(
 			"SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN (%s, %s)
 			WHERE p.post_type = 'order' AND p.post_status IN ({$in}) ORDER BY p.ID DESC LIMIT %d",
-			array_merge(array(Orders::META_SHIPMENTS, Orders::META_ITEMS), Effects::OPEN, array($limit))
+			array_merge(array(Orders::META_SHIPMENTS, Orders::META_ITEMS), $statuses, array($limit))
 		)); // phpcs:ignore WordPress.DB.PreparedSQL
 		$done = array();
 		foreach ($ids as $order_id) {
@@ -337,8 +339,11 @@ final class SyncService {
 			$status = (string) get_post_status($order_id);
 			$shipments = Orders::shipments($order_id);
 			$plans = Effects::plan($order_id, $status, $shipments, Orders::items($order_id), array());
-			if (!in_array('ship', $plans, true) && Effects::carrier_plan($order_id, $status, $shipments)) {
-				$plans = array('ship_carrier');
+			$carrier = in_array('ship', $plans, true) ? array() : Effects::carrier_plan($order_id, $status, $shipments);
+			if (in_array('ship_carrier', $carrier, true)) {
+				$plans = $carrier;
+			} elseif ($carrier) {
+				$plans = array_values(array_unique(array_merge($plans, $carrier)));
 			}
 			if (!$plans || $this->dry) {
 				continue;

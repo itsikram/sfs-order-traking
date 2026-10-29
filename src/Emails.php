@@ -24,7 +24,7 @@ final class Emails {
 	 * Every package in the theme's shipped email, instead of only the primary tracking number.
 	 */
 	public static function shipped_packages_html(string $html, int $post_id, string $status): string {
-		if ('completed' !== $status) {
+		if (!in_array($status, Effects::SHIPPED, true)) {
 			return $html;
 		}
 		$shipments = Orders::shipments($post_id);

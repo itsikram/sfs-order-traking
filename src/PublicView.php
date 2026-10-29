@@ -101,7 +101,7 @@ final class PublicView {
 	}
 
 	/**
-	 * Adds the display-only 4th progress step "Delivered" (the order status stays "completed").
+	 * Adds the 4th progress step "Delivered" with its date or the estimate.
 	 *
 	 * @param mixed $progress {steps: array<int,string>, step: int, dates: array<int,int>, notes: array<int,string>}
 	 * @param mixed $order_id
@@ -345,7 +345,7 @@ final class PublicView {
 
 	private static function note(int $order_id, array $shipments, array $summary): string {
 		$status = (string) get_post_status($order_id);
-		if ('completed' !== $status) {
+		if (!in_array($status, Effects::SHIPPED, true)) {
 			$progress = Effects::progress($order_id, $shipments, Orders::items($order_id));
 			// Not every line is accounted for yet; once every package is delivered the note would only mislead.
 			if ($progress['partial'] || ($progress['short'] && !$summary['all_delivered'])) {
@@ -375,12 +375,16 @@ final class PublicView {
 		if (!$shipments) {
 			return $item;
 		}
-		if ('completed' === $status) {
+		if (in_array($status, Effects::SHIPPED, true)) {
 			$summary = ShipmentMerger::summary($shipments);
 			$stage = $summary['all_delivered'] ? 'delivered' : self::headline_status($shipments);
-			if (in_array($stage, array('in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned'), true)) {
-				$item['label'] = CarrierTextNormalizer::label($stage) . ($summary['all_delivered'] || 1 === $summary['total'] || 0 === $summary['delivered'] ? '' : ' · ' . $summary['delivered'] . '/' . $summary['total'] . ' delivered');
+			// Plain Shipped (automatic stages off, or the theme without them) still shows the carrier stage.
+			if ('completed' === $status && in_array($stage, array('in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned'), true)) {
+				$item['label'] = CarrierTextNormalizer::label($stage);
 				$item['tone'] = CarrierTextNormalizer::tone($stage);
+			}
+			if ('delivered' !== $status && !$summary['all_delivered'] && $summary['total'] > 1 && $summary['delivered'] > 0) {
+				$item['label'] = ($item['label'] ?? '') . ' · ' . $summary['delivered'] . '/' . $summary['total'] . ' delivered';
 			}
 			return $item;
 		}

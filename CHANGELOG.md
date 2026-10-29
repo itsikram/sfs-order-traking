@@ -20,3 +20,8 @@
 - An order whose linked items all shipped but has more lines is flagged once for staff instead of waiting silently.
 - Order status pill shows the delivery stage on Shipped orders (In transit, Out for delivery, Delivered,
   Delivery issue, Returned) and "Partly shipped" on open orders (theme filter wholesale_order_status_badge_item).
+- Real order statuses for every stage (theme registers them): open orders follow the B2Sign stage forward
+  (In production, Finishing for Trimming, Ready for pickup), never while B2Sign waits on us (artwork,
+  approval, hold); shipped orders follow their packages (In transit, Out for delivery, Delivered, Delivery
+  issue, Returned to sender). A status staff set by hand is kept until the packages show a new stage.
+  Stage statuses are only written when the theme supports them.

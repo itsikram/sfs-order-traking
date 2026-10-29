@@ -33,3 +33,5 @@
 - When the site refuses the extension, Orders → Tracking sync says why (key ID sent vs this site's, secret
   mismatch, clock, no key); saving a key clears the failed-attempt lockout; leaving the page with a generated or
   edited key that is not saved asks first.
+- Step-by-step tracker on the order and tracking pages (theme filter wholesale_order_steps): the Delivered step
+  shows when the last package arrived, or the carrier's delivery estimate while on the way.

@@ -30,6 +30,7 @@ final class PublicView {
 	public static function hooks(): void {
 		add_filter('wholesale_order_shipments_html', array(self::class, 'shipments_html'), 10, 3);
 		add_filter('wholesale_order_progress', array(self::class, 'progress'), 10, 2);
+		add_filter('wholesale_order_steps', array(self::class, 'steps'), 10, 2);
 		add_filter('wholesale_my_orders_shipment_summary', array(self::class, 'my_orders_summary'), 10, 2);
 		add_filter('wholesale_order_status_badge_item', array(self::class, 'badge_item'), 10, 3);
 		add_action('template_redirect', array(self::class, 'no_cache_pages'), 1);
@@ -127,6 +128,34 @@ final class PublicView {
 			$progress['notes'][4] = 'Est. ' . self::date_label($summary['next_eta'], 'M j');
 		}
 		return $progress;
+	}
+
+	/**
+	 * The theme's step-by-step tracker: the Delivered step shows when the last package arrived, or the carrier's
+	 * delivery estimate while it is on the way.
+	 *
+	 * @param mixed $steps array<string,array{label,state,date,note,...}>
+	 * @param mixed $order_id
+	 */
+	public static function steps($steps, $order_id): array {
+		$steps = is_array($steps) ? $steps : array();
+		$shipments = isset($steps['delivered']) ? Orders::shipments((int) $order_id) : array();
+		if (!$shipments) {
+			return $steps;
+		}
+		$summary = ShipmentMerger::summary($shipments);
+		if ('done' === $steps['delivered']['state']) {
+			$latest = '';
+			foreach ($shipments as $shipment) {
+				$latest = max($latest, (string) ($shipment['delivered_at']['local'] ?? ''));
+			}
+			if ('' !== $latest) {
+				$steps['delivered']['date'] = (new \DateTimeImmutable($latest, wp_timezone()))->getTimestamp();
+			}
+		} elseif ('' !== $summary['next_eta']) {
+			$steps['delivered']['note'] = 'Est. ' . self::date_label($summary['next_eta'], 'M j');
+		}
+		return $steps;
 	}
 
 	/**

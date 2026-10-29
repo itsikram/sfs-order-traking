@@ -161,6 +161,52 @@ final class CarrierTrackTest extends IntegrationCase {
 		$this->assertStringContains($late_tn, $mails[0]['message']);
 	}
 
+	public function test_order_page_shows_every_stage_step_by_step(): void {
+		$this->settings(array('dry_run' => false));
+		$states = static function (int $order_id): array {
+			return array_map(static function ($step) {
+				return $step['state'] . ($step['warn'] ? '!' : '');
+			}, wholesale_order_steps($order_id));
+		};
+
+		$open = $this->order(array('status' => 'processing'));
+		$this->assertSame(array('received' => 'done', 'production' => 'current', 'finishing' => 'todo', 'shipped' => 'todo', 'in-transit' => 'todo', 'out-for-delivery' => 'todo', 'delivered' => 'todo'), $states($open['id']));
+		$this->assertTrue(wholesale_order_steps($open['id'])['production']['date'] > 0, 'paid orders start in production when placed');
+
+		list($shipped, , $tn) = $this->shipped_order();
+		$this->sync(array(), array($this->carrier_result('ups', $tn, array('eta_text' => 'Estimated delivery Friday, October 30'))));
+		clean_post_cache($shipped['id']);
+		$steps = wholesale_order_steps($shipped['id']);
+		$this->assertSame('in-transit', get_post_status($shipped['id']));
+		$this->assertSame(array('done', 'done', 'done', 'done', 'current', 'todo', 'todo'), array_values(array_map(static function ($s) {
+			return $s['state'];
+		}, $steps)), 'finishing was skipped but counts as done');
+		$this->assertStringContains('Est.', $steps['delivered']['note'], 'carrier estimate on the Delivered step');
+		$html = wholesale_order_steps_html($shipped['id']);
+		$this->assertStringContains('aria-current="step"', $html);
+		$this->assertStringContains('Out for delivery', $html);
+
+		$this->sync(array(), array($this->carrier_result('ups', $tn, array('headline' => 'Delivered', 'stepper' => array(array('label' => 'Delivered', 'active' => true)), 'checked_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 5)))));
+		clean_post_cache($shipped['id']);
+		$steps = wholesale_order_steps($shipped['id']);
+		$this->assertSame('done', $steps['delivered']['state']);
+		$this->assertTrue($steps['delivered']['here']);
+		$this->assertTrue($steps['delivered']['date'] > 0);
+
+		wp_update_post(array('ID' => $open['id'], 'post_status' => 'on-hold'));
+		clean_post_cache($open['id']);
+		$this->assertSame('current!', $states($open['id'])['production'], 'on hold is shown on the step it stopped at');
+		$this->assertSame('On hold', wholesale_order_steps($open['id'])['production']['label']);
+
+		wp_update_post(array('ID' => $open['id'], 'post_status' => 'ready-for-pickup'));
+		clean_post_cache($open['id']);
+		$this->assertSame(array('received', 'production', 'finishing', 'pickup'), array_keys(wholesale_order_steps($open['id'])));
+		wp_update_post(array('ID' => $open['id'], 'post_status' => 'cancelled'));
+		clean_post_cache($open['id']);
+		$this->assertSame(array(), wholesale_order_steps($open['id']));
+		$GLOBALS['wholesale_status_emails'] = array();
+	}
+
 	public function test_carrier_reading_merges_once_and_schedules(): void {
 		list($order, , $tn) = $this->shipped_order();
 		$key = 'ups:' . $tn;

@@ -27,6 +27,44 @@ final class CarrierTrackTest extends IntegrationCase {
 		return array($order, $record, $record['packages'][0]['tn']);
 	}
 
+	public function test_a_moving_package_marks_the_order_shipped(): void {
+		$order = $this->order();
+		$tn = self::ups();
+		Orders::save_shipments($order['id'], \SFS\OrderTracking\OrderHooks::with_manual(array(), 'ups', $tn, true));
+
+		$this->settings(array('dry_run' => true));
+		$data = $this->sync(array(), array($this->carrier_result('ups', $tn)));
+		$this->assertStringContains('Would mark Shipped', $data['carrier_outcomes'][0]['message']);
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']));
+
+		$this->settings(array('dry_run' => false));
+		$data = $this->sync(array(), array($this->carrier_result('ups', $tn)));
+		$this->assertStringContains('Did: mark Shipped', $data['carrier_outcomes'][0]['message']);
+		clean_post_cache($order['id']);
+		$this->assertSame('completed', get_post_status($order['id']), 'staff-typed tracking number, carrier has it: Shipped');
+		sfs_test_flush_status_emails();
+		$this->assertCount(1, $this->mails_to($order['email']), 'one shipped email');
+
+		wp_update_post(array('ID' => $order['id'], 'post_status' => 'processing'));
+		sfs_test_flush_status_emails();
+		$GLOBALS['sfs_test_mail'] = array();
+		$delivered = $this->carrier_result('ups', $tn, array('headline' => 'Delivered', 'stepper' => array(array('label' => 'Delivered', 'active' => true)), 'checked_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 5)));
+		$this->sync(array(), array($delivered));
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']), 'never twice: staff moved it back');
+
+		$waiting = $this->order();
+		$item = $this->record(array('status' => 'printing', 'packages' => array()));
+		add_post_meta($waiting['id'], Orders::META_B2_ORDER, $item['order_number']);
+		$this->sync(array($item));
+		$other = self::ups();
+		Orders::save_shipments($waiting['id'], \SFS\OrderTracking\OrderHooks::with_manual(Orders::shipments($waiting['id']), 'ups', $other, true));
+		$this->sync(array(), array($this->carrier_result('ups', $other)));
+		clean_post_cache($waiting['id']);
+		$this->assertSame('processing', get_post_status($waiting['id']), 'a linked supplier item is still printing');
+	}
+
 	public function test_carrier_reading_merges_once_and_schedules(): void {
 		list($order, , $tn) = $this->shipped_order();
 		$key = 'ups:' . $tn;

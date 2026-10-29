@@ -10,3 +10,7 @@
   extension sends them in the same run.
 - Auto In production is on: a Pending review order moves to In production from the B2Sign status, before
   any tracking number exists (built-in status list when the setting is empty).
+- A carrier reading that shows the package moving or delivered marks a Pending review / In production order
+  Shipped (once), including tracking numbers staff typed; waits while linked B2Sign items are unshipped.
+- Staff box on the front-end order page (theme action wholesale_order_staff_tools): B2Sign order number and
+  tracking number, saved through POST /admin/order-tracking and linked at once.

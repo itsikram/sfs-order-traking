@@ -14,6 +14,8 @@ namespace SFS\OrderTracking;
 final class Effects {
 	public const OPEN = array('pending', 'processing', 'on-hold', 'on_hold');
 	public const CLOSED = array('cancelled', 'refunded', 'failed');
+	/** Carrier statuses meaning the package left the shipper. */
+	public const MOVING = array('in_transit', 'out_for_delivery', 'delivered');
 
 	/**
 	 * Effects due after a B2Sign item was linked or refreshed.
@@ -46,6 +48,31 @@ final class Effects {
 			$plans[] = 'extra_package_email';
 		}
 		return $plans;
+	}
+
+	/**
+	 * Effects of a carrier reading: an order still Pending review / In production whose package is moving or
+	 * delivered is marked Shipped. Covers tracking numbers staff typed (no supplier item) and supplier items that
+	 * were never marked shipped. Orders with linked supplier items still waiting are left for the item rule.
+	 *
+	 * @param array<string,array> $shipments
+	 * @return string[]
+	 */
+	public static function carrier_plan(int $order_id, string $status, array $shipments): array {
+		if (!Settings::get('auto_ship') || !in_array($status, self::OPEN, true) || get_post_meta($order_id, Orders::META_AUTO_SHIPPED, true)) {
+			return array();
+		}
+		$moving = array_filter($shipments, static function ($shipment) {
+			return in_array($shipment['status'] ?? '', self::MOVING, true);
+		});
+		if (!$moving) {
+			return array();
+		}
+		$items = Orders::items($order_id);
+		if ($items && !self::progress($order_id, $shipments, $items)['all_shipped']) {
+			return array();
+		}
+		return array('ship_carrier');
 	}
 
 	/**
@@ -99,6 +126,12 @@ final class Effects {
 			Orders::add_activity($order_id, 'Marked Shipped automatically: every item has shipped.');
 			Log::add('action', 'Marked order #' . $number . ' Shipped', array('order' => $number), $run_id);
 		}
+		if (in_array('ship_carrier', $plans, true)) {
+			update_post_meta($order_id, Orders::META_AUTO_SHIPPED, time());
+			wp_update_post(array('ID' => $order_id, 'post_status' => 'completed'));
+			Orders::add_activity($order_id, 'Marked Shipped automatically: the carrier has the package.');
+			Log::add('action', 'Marked order #' . $number . ' Shipped (carrier reading)', array('order' => $number), $run_id);
+		}
 		if (in_array('production', $plans, true)) {
 			wp_update_post(array('ID' => $order_id, 'post_status' => 'processing'));
 			Orders::add_activity($order_id, 'Marked In production automatically from the supplier status.');
@@ -121,6 +154,7 @@ final class Effects {
 	public static function describe(array $plans): string {
 		$words = array(
 			'ship' => 'mark Shipped and send the shipped email',
+			'ship_carrier' => 'mark Shipped (the carrier has the package) and send the shipped email',
 			'production' => 'mark In production',
 			'extra_package_email' => 'email the customer about the extra package',
 		);

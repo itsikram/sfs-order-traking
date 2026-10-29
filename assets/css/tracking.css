@@ -315,3 +315,73 @@
 		transition: background-color 0.2s ease, border-color 0.2s ease;
 	}
 }
+
+/* Staff box on the order page (only staff who can edit the order see it). */
+.sfs-staff {
+	margin: 0 0 18px;
+	padding: 16px;
+	border: 1px dashed var(--shop-line, #e3e9ef);
+	background: var(--shop-soft, #f5f8fb);
+}
+
+.sfs-staff__title {
+	margin: 0 0 10px;
+	font-size: 1.05rem;
+}
+
+.sfs-staff__title span {
+	color: var(--shop-muted, #5b6b7b);
+	font-size: 0.85rem;
+	font-weight: 400;
+}
+
+.sfs-staff__fields {
+	display: grid;
+	gap: 10px;
+}
+
+.sfs-staff__fields p {
+	margin: 0;
+}
+
+.sfs-staff__fields label {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: var(--shop-ink, #172027);
+}
+
+.sfs-staff__fields input,
+.sfs-staff__fields select {
+	width: 100%;
+	min-height: 42px;
+	box-sizing: border-box;
+}
+
+.sfs-staff__help {
+	margin: 10px 0;
+	font-size: 0.85rem;
+	color: var(--shop-muted, #5b6b7b);
+}
+
+.sfs-staff__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+}
+
+.sfs-staff__msg {
+	font-weight: 600;
+}
+
+.sfs-staff__msg.is-error {
+	color: var(--shop-warn, #8a4b00);
+}
+
+@media (min-width: 640px) {
+	.sfs-staff__fields {
+		grid-template-columns: 1.2fr 0.8fr 1.4fr;
+	}
+}

@@ -18,6 +18,7 @@ final class Plugin {
 		Emails::hooks();
 		Health::hooks();
 		OrderHooks::hooks();
+		StaffTools::hooks();
 		if (is_admin()) {
 			Admin::hooks();
 			add_action('admin_init', array(Schema::class, 'ensure'));

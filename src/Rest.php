@@ -55,6 +55,16 @@ final class Rest {
 				'args' => $order_arg + array('key' => array('type' => 'string', 'required' => true)),
 			),
 		));
+		register_rest_route(self::NS, '/admin/order-tracking', array(
+			'methods' => 'POST',
+			'callback' => array(StaffTools::class, 'save'),
+			'permission_callback' => array(self::class, 'can_edit_order'),
+			'args' => $order_arg + array(
+				'b2_orders' => array('type' => 'string', 'default' => '', 'maxLength' => 200),
+				'carrier' => array('type' => 'string', 'default' => '', 'maxLength' => 20),
+				'tracking_number' => array('type' => 'string', 'default' => '', 'maxLength' => 60),
+			),
+		));
 		register_rest_route(self::NS, '/admin/link-now', array(
 			'methods' => 'POST',
 			'callback' => array(self::class, 'link_now'),

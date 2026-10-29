@@ -322,6 +322,51 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertNotContains(Orders::b2_numbers($cancelled['id'])[0], Orders::wanted_b2_numbers(), 'cancelled orders are not chased');
 	}
 
+	public function test_staff_box_on_the_order_page_saves_b2_number_and_tracking(): void {
+		$order = $this->order();
+		$record = $this->record();
+		$this->sync(array($record));
+		$save = static function (array $params): \WP_REST_Response {
+			$request = new \WP_REST_Request('POST', '/sfs-tracking/v1/admin/order-tracking');
+			foreach ($params as $key => $value) {
+				$request->set_param($key, $value);
+			}
+			return rest_do_request($request);
+		};
+
+		ob_start();
+		\SFS\OrderTracking\StaffTools::render($order['id']);
+		$this->assertSame('', ob_get_clean(), 'customers and visitors see nothing');
+		$this->assertTrue(in_array($save(array('order_id' => $order['id'], 'b2_orders' => $record['order_number']))->get_status(), array(401, 403), true));
+
+		wp_set_current_user(get_users(array('role' => 'administrator', 'number' => 1))[0]->ID);
+		ob_start();
+		\SFS\OrderTracking\StaffTools::render($order['id']);
+		$this->assertStringContains('B2Sign order number', ob_get_clean());
+
+		$this->assertSame(400, $save(array('order_id' => $order['id'], 'b2_orders' => 'not a number'))->get_status());
+		$this->assertSame(400, $save(array('order_id' => $order['id'], 'carrier' => 'fedex', 'tracking_number' => '1Z999'))->get_status());
+
+		$response = $save(array('order_id' => $order['id'], 'b2_orders' => strtolower($record['order_number'])));
+		$this->assertSame(200, $response->get_status(), wp_json_encode($response->get_data()));
+		$this->assertSame(array($record['order_number']), Orders::b2_numbers($order['id']));
+		$this->assertCount(1, Orders::shipments($order['id']), 'linked at once from the stored record');
+		clean_post_cache($order['id']);
+		$this->assertSame('completed', get_post_status($order['id']));
+
+		$extra = self::fedex();
+		$response = $save(array('order_id' => $order['id'], 'b2_orders' => $record['order_number'], 'carrier' => '', 'tracking_number' => $extra));
+		$this->assertSame(200, $response->get_status(), wp_json_encode($response->get_data()));
+		$shipments = Orders::shipments($order['id']);
+		$this->assertSame('fedex:' . $extra, array_key_first($shipments), 'staff number becomes the primary package');
+		$this->assertGreaterOrEqual(time() + 1000, (int) $shipments['fedex:' . $extra]['priority_until']);
+		// Not for other tests' check queues.
+		$shipments['fedex:' . $extra]['priority_until'] = 0;
+		$shipments['fedex:' . $extra]['next_check_at'] = time() + DAY_IN_SECONDS;
+		Orders::save_shipments($order['id'], $shipments);
+		wp_set_current_user(0);
+	}
+
 	public function test_review_queue_bulk_actions(): void {
 		$order = $this->order(array('fname' => 'Bulky', 'lname' => 'Bulkerson', 'company' => 'Bulk Signs', 'zip' => '70888', 'city' => 'Bulkton'));
 		$suggested = $this->record(array('ship_to' => array('fullname' => 'Bulky Bulkerson', 'company' => 'Bulk Signs LLC', 'city' => 'Bulkton', 'state' => 'LA', 'zipcode' => '70888')));

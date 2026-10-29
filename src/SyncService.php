@@ -269,8 +269,9 @@ final class SyncService {
 			}
 			$out['outcome'] = $result['ok'] ? 'updated' : 'error';
 			$out['message'] = $result['ok'] ? ($applied['from'] !== $applied['to'] ? 'Status ' . $applied['from'] . ' → ' . $applied['to'] . '.' : 'Status unchanged.') : 'Check failed: ' . $result['error']['code'] . '.';
+			$plans = $result['ok'] ? Effects::carrier_plan($order_id, (string) get_post_status($order_id), array($key => $applied['shipment']) + $shipments) : array();
 			if ($this->dry) {
-				$out['message'] = 'Dry run — nothing saved. ' . $out['message'];
+				$out['message'] = 'Dry run — nothing saved. ' . $out['message'] . ($plans ? ' Would ' . Effects::describe($plans) . '.' : '');
 				continue;
 			}
 
@@ -278,6 +279,11 @@ final class SyncService {
 			$shipment = $this->notify($order_id, $key, $applied['shipment'], $applied['from'], $applied['to'], $shipments);
 			$shipments[$key] = $shipment;
 			Orders::save_shipments($order_id, $shipments);
+			if ($plans) {
+				// After the shipments are saved, so the theme's shipped email shows the reading.
+				Effects::apply($order_id, $plans, $shipments, array(), $this->run_id);
+				$out['message'] .= ' Did: ' . Effects::describe($plans) . '.';
+			}
 			if ($applied['from'] !== $applied['to']) {
 				Log::add('action', 'Order #' . $number_ours . ' package ' . Log::mask($number) . ': ' . $applied['from'] . ' → ' . $applied['to'], array('order' => $number_ours, 'tracking' => Log::mask($number), 'from' => $applied['from'], 'to' => $applied['to']), $this->run_id);
 			}

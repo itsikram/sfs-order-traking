@@ -30,9 +30,9 @@ final class Auth {
 			return new \WP_Error('sfs_locked', 'Too many failed attempts from this address. Try again in 15 minutes.', array('status' => 429));
 		}
 		if (!Keys::configured()) {
-			return new \WP_Error('sfs_not_configured', 'Tracking sync keys are not set up on this site yet (wp-config.php).', array('status' => 503));
+			return new \WP_Error('sfs_not_configured', 'Tracking sync is not connected on this site yet: save a key on Orders → Tracking sync.', array('status' => 503));
 		}
-		$body = $request->get_body();
+		$body = (string) $request->get_body();
 		if (strlen($body) > RecordValidator::MAX_BODY) {
 			return new \WP_Error('sfs_too_large', 'The request body is larger than 1 MB.', array('status' => 413));
 		}

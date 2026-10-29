@@ -21,6 +21,19 @@ final class ShipmentMerger {
 	}
 
 	/**
+	 * B2Sign items shipped in this package (packages saved before item_ids existed name one item).
+	 *
+	 * @return int[]
+	 */
+	public static function item_ids(array $shipment): array {
+		$ids = array_map('intval', (array) ($shipment['b2']['item_ids'] ?? array()));
+		if (!empty($shipment['b2']['item_id'])) {
+			$ids[] = (int) $shipment['b2']['item_id'];
+		}
+		return array_values(array_unique(array_filter($ids)));
+	}
+
+	/**
 	 * A new shipment with every field present.
 	 */
 	public static function blank(string $carrier, string $number, string $source, int $now): array {
@@ -74,6 +87,8 @@ final class ShipmentMerger {
 			$shipment['b2'] = array(
 				'order_number' => $record['order_number'],
 				'item_id' => $record['item_id'],
+				// B2Sign often ships several items of one order in the same box: every one of them is in this package.
+				'item_ids' => array_values(array_unique(array_merge(self::item_ids($shipment), array((int) $record['item_id'])))),
 				'jobid' => $record['jobid'],
 				'item_status' => $record['status'],
 				'service' => $record['service'],

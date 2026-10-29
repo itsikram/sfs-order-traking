@@ -31,6 +31,7 @@ final class PublicView {
 		add_filter('wholesale_order_shipments_html', array(self::class, 'shipments_html'), 10, 3);
 		add_filter('wholesale_order_progress', array(self::class, 'progress'), 10, 2);
 		add_filter('wholesale_my_orders_shipment_summary', array(self::class, 'my_orders_summary'), 10, 2);
+		add_filter('wholesale_order_status_badge_item', array(self::class, 'badge_item'), 10, 3);
 		add_action('template_redirect', array(self::class, 'no_cache_pages'), 1);
 		add_action('wp_enqueue_scripts', array(self::class, 'styles'), 20);
 	}
@@ -356,6 +357,37 @@ final class PublicView {
 			return sprintf('%d of %d packages delivered', $summary['delivered'], $summary['total']);
 		}
 		return '';
+	}
+
+	/**
+	 * One order's status pill (theme filter wholesale_order_status_badge_item): a Shipped order shows how far its
+	 * packages got (In transit, Out for delivery, Delivered, Delivery issue); an order still in production with
+	 * some products already shipped shows "Partly shipped". The stored order status never changes here.
+	 *
+	 * @param mixed $item {label, tone, ...}
+	 * @param mixed $status
+	 * @param mixed $order_id
+	 */
+	public static function badge_item($item, $status, $order_id): array {
+		$item = is_array($item) ? $item : array();
+		$order_id = (int) $order_id;
+		$shipments = Orders::shipments($order_id);
+		if (!$shipments) {
+			return $item;
+		}
+		if ('completed' === $status) {
+			$summary = ShipmentMerger::summary($shipments);
+			$stage = $summary['all_delivered'] ? 'delivered' : self::headline_status($shipments);
+			if (in_array($stage, array('in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned'), true)) {
+				$item['label'] = CarrierTextNormalizer::label($stage) . ($summary['all_delivered'] || 1 === $summary['total'] || 0 === $summary['delivered'] ? '' : ' · ' . $summary['delivered'] . '/' . $summary['total'] . ' delivered');
+				$item['tone'] = CarrierTextNormalizer::tone($stage);
+			}
+			return $item;
+		}
+		if (in_array($status, Effects::OPEN, true) && Effects::progress($order_id, $shipments, Orders::items($order_id))['partial']) {
+			$item['label'] = 'Partly shipped';
+		}
+		return $item;
 	}
 
 	private static function headline_status(array $shipments): string {

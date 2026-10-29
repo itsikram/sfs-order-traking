@@ -83,9 +83,13 @@ final class Effects {
 	 */
 	public static function progress(int $order_id, array $shipments, array $items): array {
 		$with_packages = array();
+		$b2_boxes = array();
 		foreach ($shipments as $shipment) {
-			if (!empty($shipment['b2']['item_id'])) {
-				$with_packages[(int) $shipment['b2']['item_id']] = true;
+			foreach (Core\ShipmentMerger::item_ids($shipment) as $item_id) {
+				$with_packages[$item_id] = true;
+			}
+			if (!empty($shipment['b2']['order_number'])) {
+				$b2_boxes[(string) $shipment['b2']['order_number']] = true;
 			}
 		}
 		$active = 0;
@@ -95,7 +99,11 @@ final class Effects {
 				continue;
 			}
 			$active++;
-			if (in_array($item['status'] ?? '', array('shipped', 'completed'), true) && isset($with_packages[(int) $item['item_id']])) {
+			// Its own package, or (one box for several items, stored before item_ids) B2Sign lists a package for it and
+			// a box of the same B2Sign order is on this order.
+			$boxed = isset($with_packages[(int) $item['item_id']])
+				|| ((int) ($item['packages'] ?? 0) > 0 && isset($b2_boxes[(string) ($item['b2_order'] ?? '')]));
+			if (in_array($item['status'] ?? '', array('shipped', 'completed', 'delivered'), true) && $boxed) {
 				$shipped++;
 			}
 		}

@@ -11,6 +11,7 @@ declare(strict_types=1);
 
 namespace SFS\OrderTracking;
 
+use SFS\OrderTracking\Core\ShipmentMerger;
 use SFS\OrderTracking\Core\TrackingUrls;
 
 final class Rest {
@@ -178,10 +179,9 @@ final class Rest {
 		}
 		$removed = $shipments[$key];
 		unset($shipments[$key]);
-		$item_id = (int) ($removed['b2']['item_id'] ?? 0);
-		if ($item_id) {
+		foreach (ShipmentMerger::item_ids($removed) as $item_id) {
 			$left = array_filter($shipments, static function ($shipment) use ($item_id) {
-				return (int) ($shipment['b2']['item_id'] ?? 0) === $item_id;
+				return in_array($item_id, ShipmentMerger::item_ids($shipment), true);
 			});
 			if (!$left) {
 				// The sync would add it back: remember that this supplier item is not part of this order.

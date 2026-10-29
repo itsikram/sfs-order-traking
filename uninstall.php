@@ -34,6 +34,7 @@ if ($sfs_delete_meta) {
 		SFS\OrderTracking\Orders::META_EXCLUDED,
 		SFS\OrderTracking\Orders::META_ACTIVITY,
 		SFS\OrderTracking\Orders::META_AUTO_SHIPPED,
+		'_sfs_short_flagged',
 	);
 	foreach ($sfs_keys as $sfs_key) {
 		delete_post_meta_by_key($sfs_key);

@@ -367,6 +367,81 @@ final class AuthSyncTest extends IntegrationCase {
 		wp_set_current_user(0);
 	}
 
+	public function test_two_products_in_one_box_ship_the_order(): void {
+		$order = $this->order(array('items' => array('Magnets', 'Magnets small')));
+		$first = $this->record(array('jobid' => 'x-01'));
+		$box = $first['packages'];
+		$second = $this->record(array('order_number' => $first['order_number'], 'jobid' => 'x-02', 'packages' => $box));
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $first['order_number']);
+		$data = $this->sync(array($first, $second));
+		$this->assertSame(array('matched', 'matched'), array_column($data['results'], 'outcome'));
+		$shipments = Orders::shipments($order['id']);
+		$this->assertCount(1, $shipments, 'one box');
+		$this->assertSame(array((int) $first['item_id'], (int) $second['item_id']), reset($shipments)['b2']['item_ids'], 'the box carries both products');
+		clean_post_cache($order['id']);
+		$this->assertSame('completed', get_post_status($order['id']), 'both products shipped: order Shipped');
+		$this->assertSame(0, (int) $this->flags_for($order['number']), 'not short: no warning');
+
+		$legacy = $shipments;
+		$key = array_key_first($legacy);
+		unset($legacy[$key]['b2']['item_ids']);
+		$this->assertTrue(\SFS\OrderTracking\Effects::progress($order['id'], $legacy, Orders::items($order['id']))['all_shipped'], 'boxes saved before item_ids still count for both');
+	}
+
+	public function test_every_sync_brings_stored_orders_up_to_date(): void {
+		$order = $this->order(array('items' => array('Magnets', 'Magnets small')));
+		$first = $this->record();
+		$second = $this->record(array('order_number' => $first['order_number'], 'packages' => $first['packages']));
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $first['order_number']);
+		$this->settings(array('dry_run' => true));
+		$this->sync(array($first, $second));
+		$this->settings(array('dry_run' => false));
+		$this->sync(array($first));
+		$this->sync(array($second));
+		// Simulate data stored before the rules applied: shipped items, order still In production.
+		wp_update_post(array('ID' => $order['id'], 'post_status' => 'processing'));
+		delete_post_meta($order['id'], Orders::META_AUTO_SHIPPED);
+		sfs_test_flush_status_emails();
+		$GLOBALS['sfs_test_mail'] = array();
+		$this->sync();
+		clean_post_cache($order['id']);
+		$this->assertSame('completed', get_post_status($order['id']), 'an empty sync catches the order up');
+		sfs_test_flush_status_emails();
+		$this->assertCount(1, $this->mails_to($order['email']));
+
+		wp_update_post(array('ID' => $order['id'], 'post_status' => 'processing'));
+		$this->sync();
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']), 'staff moved it back: left alone');
+
+		$pending = $this->order(array('status' => 'pending'));
+		$printing = $this->record(array('status' => 'printing', 'packages' => array()));
+		add_post_meta($pending['id'], Orders::META_B2_ORDER, $printing['order_number']);
+		$this->settings(array('dry_run' => false, 'auto_production' => false));
+		$this->sync(array($printing));
+		$this->settings(array('dry_run' => false, 'auto_production' => true));
+		$this->sync();
+		clean_post_cache($pending['id']);
+		$this->assertSame('processing', get_post_status($pending['id']), 'In production once the rule is on, without a resend');
+	}
+
+	public function test_a_short_order_is_flagged_once_and_waits(): void {
+		$order = $this->order(array('items' => array('Banner', 'Flag')));
+		$only = $this->record();
+		add_post_meta($order['id'], Orders::META_B2_ORDER, $only['order_number']);
+		$this->sync(array($only));
+		$this->sync(array($only));
+		$this->sync();
+		clean_post_cache($order['id']);
+		$this->assertSame('processing', get_post_status($order['id']), 'second product not linked yet');
+		$this->assertSame(1, (int) $this->flags_for($order['number']));
+	}
+
+	private function flags_for(string $number): string {
+		global $wpdb;
+		return (string) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . \SFS\OrderTracking\Schema::log() . " WHERE type = 'flag' AND message LIKE %s", '%' . $wpdb->esc_like($number) . '%every linked%'));
+	}
+
 	public function test_review_queue_bulk_actions(): void {
 		$order = $this->order(array('fname' => 'Bulky', 'lname' => 'Bulkerson', 'company' => 'Bulk Signs', 'zip' => '70888', 'city' => 'Bulkton'));
 		$suggested = $this->record(array('ship_to' => array('fullname' => 'Bulky Bulkerson', 'company' => 'Bulk Signs LLC', 'city' => 'Bulkton', 'state' => 'LA', 'zipcode' => '70888')));

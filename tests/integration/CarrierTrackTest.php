@@ -27,6 +27,29 @@ final class CarrierTrackTest extends IntegrationCase {
 		return array($order, $record, $record['packages'][0]['tn']);
 	}
 
+	public function test_status_pill_shows_the_delivery_stage(): void {
+		list($order, , $tn) = $this->shipped_order();
+		$shipped = array('label' => 'Shipped', 'tone' => 'success');
+		$this->assertSame('Shipped', PublicView::badge_item($shipped, 'completed', $order['id'])['label'], 'not read yet');
+		$this->sync(array(), array($this->carrier_result('ups', $tn)));
+		$this->assertSame('In transit', PublicView::badge_item($shipped, 'completed', $order['id'])['label']);
+		$delivered = $this->carrier_result('ups', $tn, array('headline' => 'Delivered', 'stepper' => array(array('label' => 'Delivered', 'active' => true)), 'checked_at' => gmdate('Y-m-d\TH:i:s\Z', time() - 5)));
+		$this->sync(array(), array($delivered));
+		$pill = PublicView::badge_item($shipped, 'completed', $order['id']);
+		$this->assertSame(array('Delivered', 'success'), array($pill['label'], $pill['tone']));
+		$this->assertStringContains('Delivered', wholesale_order_status_badge('completed', $order['id']));
+		$this->assertStringContains('Shipped', wholesale_order_status_badge('completed'), 'without an order id: the stored status');
+
+		$two = $this->order(array('items' => array('Banner', 'Flag')));
+		$first = $this->record();
+		$second = $this->record(array('order_number' => $first['order_number'], 'status' => 'printing', 'packages' => array()));
+		add_post_meta($two['id'], Orders::META_B2_ORDER, $first['order_number']);
+		$this->sync(array($first, $second));
+		clean_post_cache($two['id']);
+		$this->assertSame('processing', get_post_status($two['id']));
+		$this->assertSame('Partly shipped', PublicView::badge_item(array('label' => 'In production', 'tone' => 'info'), 'processing', $two['id'])['label']);
+	}
+
 	public function test_a_moving_package_marks_the_order_shipped(): void {
 		$order = $this->order();
 		$tn = self::ups();

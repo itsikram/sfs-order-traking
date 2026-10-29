@@ -34,6 +34,8 @@ final class SyncService {
 	private $carriers = array();
 	/** @var array<int,bool> */
 	private $seen_items = array();
+	/** @var array<int,array{number:string,item:int}> Orders that looked short; flagged at the end if still short. */
+	private $short = array();
 
 	/**
 	 * Seconds to wait for another sync to finish before answering "busy".
@@ -83,6 +85,8 @@ final class SyncService {
 			foreach ($body['results'] as $result) {
 				$carrier_outcomes[] = $run->carrier($result);
 			}
+			$run->reconcile();
+			$run->flag_short();
 			$checks = $run->checks();
 			$run->finish($body['client'], count($body['records']), count($body['results']), count($checks));
 			if (!get_transient('sfs_tracking_pruned')) {
@@ -129,6 +133,7 @@ final class SyncService {
 					$results[] = $run->record($record);
 				}
 			}
+			$run->flag_short();
 			if ($results) {
 				$run->finish(array('version' => '', 'env' => 'staff'), count($results), 0, 0);
 			}
@@ -295,6 +300,56 @@ final class SyncService {
 	}
 
 	/**
+	 * Flags orders whose linked supplier items all shipped while the order has more lines (combined by the supplier,
+	 * or another B2Sign order not typed yet), once all of this request's items are in.
+	 */
+	public function flag_short(): void {
+		foreach ($this->short as $order_id => $seen) {
+			$progress = Effects::progress($order_id, Orders::shipments($order_id), Orders::items($order_id));
+			$key = $progress['shipped'] . '/' . $progress['lines'];
+			if ($progress['short'] && in_array((string) get_post_status($order_id), Effects::OPEN, true) && $key !== get_post_meta($order_id, '_sfs_short_flagged', true)) {
+				update_post_meta($order_id, '_sfs_short_flagged', $key);
+				Log::add('flag', sprintf('Order #%s: every linked supplier item shipped but the order has %d lines; type the other B2Sign order number or mark it Shipped by hand', $seen['number'], $progress['lines']), array('order' => $seen['number'], 'item' => $seen['item']), $this->run_id, 'warning');
+			}
+		}
+		$this->short = array();
+	}
+
+	/**
+	 * Keeps the order status in step with what is already stored, on every sync: open orders whose supplier items
+	 * all shipped, or whose packages are moving, become Shipped; Pending review orders the supplier started become
+	 * In production. Catches orders whose data arrived before a rule applied, or across several syncs. Forward
+	 * only, never twice (staff can move an order back), nothing written in dry run.
+	 *
+	 * @return array<int,string[]> order_id => applied plans
+	 */
+	public function reconcile(int $limit = 100): array {
+		global $wpdb;
+		$in = implode(',', array_fill(0, count(Effects::OPEN), '%s'));
+		$ids = (array) $wpdb->get_col($wpdb->prepare(
+			"SELECT DISTINCT p.ID FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key IN (%s, %s)
+			WHERE p.post_type = 'order' AND p.post_status IN ({$in}) ORDER BY p.ID DESC LIMIT %d",
+			array_merge(array(Orders::META_SHIPMENTS, Orders::META_ITEMS), Effects::OPEN, array($limit))
+		)); // phpcs:ignore WordPress.DB.PreparedSQL
+		$done = array();
+		foreach ($ids as $order_id) {
+			$order_id = (int) $order_id;
+			$status = (string) get_post_status($order_id);
+			$shipments = Orders::shipments($order_id);
+			$plans = Effects::plan($order_id, $status, $shipments, Orders::items($order_id), array());
+			if (!in_array('ship', $plans, true) && Effects::carrier_plan($order_id, $status, $shipments)) {
+				$plans = array('ship_carrier');
+			}
+			if (!$plans || $this->dry) {
+				continue;
+			}
+			Effects::apply($order_id, $plans, $shipments, array(), $this->run_id);
+			$done[$order_id] = $plans;
+		}
+		return $done;
+	}
+
+	/**
 	 * Carrier checks for the extension's next run: fresh readings asked for first, then the most overdue.
 	 */
 	public function checks(): array {
@@ -374,8 +429,9 @@ final class SyncService {
 			$flags[] = 'the order is ' . $status . ' but the item shipped';
 		}
 		$progress = Effects::progress($order_id, $merge['shipments'], $items);
-		if ($progress['short'] && in_array($status, Effects::OPEN, true) && Settings::get('auto_ship')) {
-			$flags[] = sprintf('every linked supplier item shipped but the order has %d lines; link the rest or mark it Shipped by hand', $progress['lines']);
+		if ($progress['short'] && in_array($status, Effects::OPEN, true) && Settings::get('auto_ship') && !$this->dry) {
+			// Other items of this order may still come in this request: decided in flag_short().
+			$this->short[$order_id] = array('number' => $number, 'item' => $item_id);
 		}
 
 		$outcome = $is_new_link ? 'matched' : ($merge['changed'] || $items_changed ? 'updated' : 'unchanged');

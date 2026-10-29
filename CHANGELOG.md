@@ -14,3 +14,9 @@
   Shipped (once), including tracking numbers staff typed; waits while linked B2Sign items are unshipped.
 - Staff box on the front-end order page (theme action wholesale_order_staff_tools): B2Sign order number and
   tracking number, saved through POST /admin/order-tracking and linked at once.
+- One box holding several B2Sign items counts for every product in it (b2.item_ids), so orders whose
+  products share a package are marked Shipped; removing a shipment unlinks each item it carried.
+- Every sync brings stored open orders up to date (Shipped / In production), not only orders in that run.
+- An order whose linked items all shipped but has more lines is flagged once for staff instead of waiting silently.
+- Order status pill shows the delivery stage on Shipped orders (In transit, Out for delivery, Delivered,
+  Delivery issue, Returned) and "Partly shipped" on open orders (theme filter wholesale_order_status_badge_item).

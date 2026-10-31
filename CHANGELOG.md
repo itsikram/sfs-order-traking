@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-10-31
+
+- Removing a B2Sign order number from an order (typed on the wrong order) now unlinks its supplier items and
+  their packages and reopens them, so the next sync links them to the order that has the number. Before, the
+  old link stayed and the right order's item sat in the review queue as "Several orders match".
+
 ## 1.0.0 — 2026-10-29
 
 - First release: signed /ping and /sync, B2Sign order-number matching, review queue, shipments meta,

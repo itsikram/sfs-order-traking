@@ -19,6 +19,7 @@ namespace SFS\OrderTracking;
 
 use SFS\OrderTracking\Core\CheckScheduler;
 use SFS\OrderTracking\Core\OrderNumberExtractor;
+use SFS\OrderTracking\Core\ShipmentMerger;
 
 final class Orders {
 	public const META_SHIPMENTS = '_sfs_shipments';
@@ -197,8 +198,63 @@ final class Orders {
 		}
 		foreach (array_diff($have, $numbers) as $number) {
 			delete_post_meta($order_id, self::META_B2_ORDER, $number);
+			self::forget_b2_order($order_id, $number);
 		}
 		return array_diff($numbers, $have) || array_diff($have, $numbers);
+	}
+
+	/**
+	 * A B2Sign order number staff removed from this order (typed on the wrong one): unlinks its supplier items and
+	 * their packages and reopens them, so the next sync links them to the order that has the number. Without this
+	 * the old link kept the item here and the right order only got "Several orders match" in the review queue.
+	 * Items staff confirmed for this order in the review queue stay.
+	 *
+	 * @return int Items unlinked.
+	 */
+	public static function forget_b2_order(int $order_id, string $b2_number): int {
+		$number = self::number($order_id);
+		$forget = array();
+		foreach (self::items($order_id) as $item_id => $item) {
+			if (0 === strcasecmp((string) $item['b2_order'], $b2_number) && Inbox::confirmed_order((int) $item_id) !== $number) {
+				$forget[] = (int) $item_id;
+			}
+		}
+		if (!$forget) {
+			return 0;
+		}
+
+		$shipments = self::shipments($order_id);
+		$dropped = array();
+		foreach ($shipments as $key => $shipment) {
+			$ids = ShipmentMerger::item_ids($shipment);
+			if (!array_intersect($ids, $forget)) {
+				continue;
+			}
+			$left = array_values(array_diff($ids, $forget));
+			if (!$left) {
+				$dropped[] = $shipment;
+				unset($shipments[$key]);
+				continue;
+			}
+			// A box shared with items of another B2Sign order typed here stays, without the forgotten items.
+			$shipments[$key]['b2']['item_ids'] = $left;
+			$shipments[$key]['b2']['item_id'] = $left[0];
+		}
+		$primary = (string) get_post_meta($order_id, '_tracking_number', true);
+		self::save_shipments($order_id, $shipments);
+		if (!$shipments && in_array($primary, array_column($dropped, 'tracking_number'), true)) {
+			update_post_meta($order_id, '_tracking_number', '');
+			update_post_meta($order_id, '_tracking_carrier', '');
+		}
+
+		foreach ($forget as $item_id) {
+			self::unlink_item($order_id, $item_id);
+			if (!Inbox::is_ignored($item_id)) {
+				Inbox::set_state($item_id, 'unmatched');
+			}
+		}
+		self::add_activity($order_id, 'B2Sign ' . strtoupper($b2_number) . ' removed: ' . count($forget) . (1 === count($forget) ? ' supplier item' : ' supplier items') . ' and ' . count($dropped) . (1 === count($dropped) ? ' package' : ' packages') . ' unlinked from this order');
+		return count($forget);
 	}
 
 	/**

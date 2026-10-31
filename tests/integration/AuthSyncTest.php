@@ -320,6 +320,31 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertCount(1, Orders::shipments($confirm_order['id']));
 	}
 
+	public function test_a_b2sign_number_typed_on_the_wrong_order_moves_when_corrected(): void {
+		$wrong = $this->order();
+		$right = $this->order();
+		$record = $this->record(array('ship_to' => array('fullname' => 'Someone Else', 'company' => '', 'city' => 'X', 'state' => 'ZZ', 'zipcode' => '00004')));
+		$tn = $record['packages'][0]['tn'];
+		Orders::set_b2_numbers($wrong['id'], array($record['order_number']));
+		$this->assertSame('matched', $this->sync(array($record))['results'][0]['outcome']);
+		$this->assertCount(1, Orders::shipments($wrong['id']));
+
+		Orders::set_b2_numbers($right['id'], array($record['order_number']));
+		$this->assertSame('needs_review', $this->sync(array($record))['results'][0]['outcome'], 'typed on both orders: staff decide');
+
+		Orders::set_b2_numbers($wrong['id'], array());
+		$this->assertSame(array(), Orders::shipments($wrong['id']), 'the package left with the number');
+		$this->assertSame(array(), Orders::items($wrong['id']));
+		$this->assertSame(array(), Orders::by_tracking($record['packages'][0]['carrier'], $tn));
+		$this->assertSame('', (string) get_post_meta($wrong['id'], '_tracking_number', true));
+
+		$data = $this->sync();
+		$this->assertSame('matched', $data['results'][0]['outcome'], 'relinked from the stored record, no resend needed');
+		$this->assertSame($right['number'], $data['results'][0]['order_number']);
+		$this->assertCount(1, Orders::shipments($right['id']));
+		$this->assertSame(array(), Orders::shipments($wrong['id']));
+	}
+
 	public function test_in_production_before_any_tracking_number_then_shipped(): void {
 		$order = $this->order(array('status' => 'pending'));
 		$record = $this->record(array('status' => 'awaiting_artwork', 'packages' => array()));

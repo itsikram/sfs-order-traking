@@ -189,8 +189,9 @@ final class Inbox {
 
 	/**
 	 * Items that can now be linked without the extension resending them: open items whose B2Sign order number staff
-	 * have since typed on exactly one order (typed on several, they stay in review), and items staff confirmed
-	 * while dry-run was on. One record per item.
+	 * have since typed on an order (typed on several, the ship-to ZIP may pick one; otherwise they stay in review),
+	 * and items staff confirmed that are not linked to the confirmed order yet (confirmed during dry run, or while a
+	 * sync held the lock). One record per item.
 	 *
 	 * @return array<int,array> item_id => record
 	 */
@@ -201,8 +202,10 @@ final class Inbox {
 		$rows = (array) $wpdb->get_results($wpdb->prepare(
 			"SELECT i.item_id, i.record FROM `{$table}` i
 			WHERE (i.state IN ('unmatched','needs_review') AND i.b2_order_number IN (
-					SELECT pm.meta_value FROM {$wpdb->postmeta} pm WHERE pm.meta_key = %s GROUP BY pm.meta_value HAVING COUNT(DISTINCT pm.post_id) = 1))
-			   OR (i.state = 'linked' AND i.confirmed = 1 AND NOT EXISTS (SELECT 1 FROM {$wpdb->postmeta} pm2 WHERE pm2.meta_key = %s AND pm2.meta_value = CAST(i.item_id AS CHAR)))
+					SELECT pm.meta_value FROM {$wpdb->postmeta} pm WHERE pm.meta_key = %s))
+			   OR (i.state = 'linked' AND i.confirmed = 1 AND NOT EXISTS (
+					SELECT 1 FROM {$wpdb->postmeta} pm2 INNER JOIN {$wpdb->postmeta} pm3 ON pm3.post_id = pm2.post_id AND pm3.meta_key = 'order_id'
+					WHERE pm2.meta_key = %s AND pm2.meta_value = CAST(i.item_id AS CHAR) AND pm3.meta_value IN (CONCAT('order_', i.order_number), i.order_number)))
 			ORDER BY i.id LIMIT %d",
 			Orders::META_B2_ORDER,
 			Orders::META_ITEM,

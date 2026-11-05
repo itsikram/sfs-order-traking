@@ -103,6 +103,25 @@ final class Matcher {
 	}
 
 	/**
+	 * Picks between orders that all have an exact signal for this item (one B2Sign order number typed on several
+	 * orders: products for several customers in one supplier order, or a number typed on a wrong order too). Only an
+	 * order whose ship-to or billing ZIP is the item's ship-to ZIP qualifies, and only when exactly one does.
+	 *
+	 * @param array $record Validated ShipmentRecord.
+	 * @param array $candidates Orders::candidate() of each order.
+	 * @return int|null The order ID, or null when staff must decide.
+	 */
+	public static function by_ship_to(array $record, array $candidates): ?int {
+		$hits = array();
+		foreach ($candidates as $candidate) {
+			if (self::score($record, $candidate, 0)['parts']['zip'] > 0) {
+				$hits[] = (int) $candidate['order_id'];
+			}
+		}
+		return 1 === count($hits) ? $hits[0] : null;
+	}
+
+	/**
 	 * One clear winner: ≥ 90 with the runner-up below 60.
 	 */
 	public static function confident(array $ranked): bool {

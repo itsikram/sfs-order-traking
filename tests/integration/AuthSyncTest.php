@@ -345,6 +345,92 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertSame(array(), Orders::shipments($wrong['id']));
 	}
 
+	public function test_confirming_the_right_order_moves_the_item_off_the_wrong_one(): void {
+		$wrong = $this->order(array('status' => 'pending'));
+		$right = $this->order(array('status' => 'pending'));
+		$record = $this->record(array('ship_to' => array('fullname' => 'Someone Else', 'company' => '', 'city' => 'X', 'state' => 'ZZ', 'zipcode' => '00011')));
+		$tn = $record['packages'][0]['tn'];
+		Orders::set_b2_numbers($wrong['id'], array($record['order_number']));
+		$this->sync(array($record));
+		clean_post_cache($wrong['id']);
+		$this->assertSame('completed', get_post_status($wrong['id']), 'shipped from the number typed on the wrong order');
+		Orders::set_b2_numbers($right['id'], array($record['order_number']));
+		$this->assertSame('needs_review', $this->sync(array($record))['results'][0]['outcome'], 'same ZIP on neither order: staff decide');
+
+		$row = (int) Inbox::item_rows((int) $record['item_id'])[0]['id'];
+		wp_set_current_user(get_users(array('role' => 'administrator', 'number' => 1))[0]->ID);
+		$request = new \WP_REST_Request('POST', '/sfs-tracking/v1/admin/inbox/confirm');
+		$request->set_param('id', $row);
+		$request->set_param('order_number', $right['number']);
+		$response = rest_do_request($request);
+		wp_set_current_user(0);
+		$this->assertSame(200, $response->get_status(), wp_json_encode($response->get_data()));
+		$this->assertStringContains('Moved it off #' . $wrong['number'], $response->get_data()['message']);
+
+		$this->assertCount(1, Orders::shipments($right['id']));
+		$this->assertSame(array($right['id']), Orders::by_tracking('ups', $tn), 'the package is on one order only');
+		$this->assertSame(array($right['id']), Orders::by_item((int) $record['item_id']));
+		$this->assertSame(array(), Orders::shipments($wrong['id']));
+		$this->assertSame(array(), Orders::items($wrong['id']));
+		$this->assertSame('', (string) get_post_meta($wrong['id'], '_tracking_number', true));
+		$this->assertSame(array((int) $record['item_id']), Orders::excluded($wrong['id']), 'staff chose: kept off the wrong order');
+		$this->assertSame('', (string) get_post_meta($wrong['id'], Orders::META_AUTO_SHIPPED, true), 'the right supplier order can still ship it');
+		clean_post_cache($wrong['id']);
+		$this->assertSame('completed', get_post_status($wrong['id']), 'its status is left for staff');
+		$this->assertSame(1, $this->moved_flags($wrong['number']));
+		clean_post_cache($right['id']);
+		$this->assertSame('completed', get_post_status($right['id']));
+
+		$this->assertSame('unchanged', $this->sync(array($record))['results'][0]['outcome'], 'stays on the confirmed order');
+		$this->assertSame(array(), Orders::shipments($wrong['id']));
+		$this->assertSame(1, $this->moved_flags($wrong['number']), 'flagged once');
+	}
+
+	public function test_a_typed_number_beats_a_link_nothing_backs(): void {
+		$old = $this->order(array('status' => 'pending'));
+		$new = $this->order(array('status' => 'pending'));
+		$record = $this->record(array('ship_to' => array('fullname' => 'Someone Else', 'company' => '', 'city' => 'X', 'state' => 'ZZ', 'zipcode' => '00012')));
+		Orders::set_b2_numbers($old['id'], array($record['order_number']));
+		$this->sync(array($record));
+		$this->assertCount(1, Orders::shipments($old['id']));
+		// Removed before 1.0.1 (no unlink on removal): the link stayed with nothing behind it.
+		delete_post_meta($old['id'], Orders::META_B2_ORDER);
+		$this->assertSame('unchanged', $this->sync(array($record))['results'][0]['outcome'], 'no other order claims it: the link stands');
+
+		Orders::set_b2_numbers($new['id'], array($record['order_number']));
+		$this->assertContains($record['order_number'], $this->sync()['want_b2'], 'linked straight away, so not stored: the extension is asked for it');
+		$data = $this->sync(array($record));
+		$this->assertSame('matched', $data['results'][0]['outcome']);
+		$this->assertSame($new['number'], $data['results'][0]['order_number']);
+		$this->assertCount(1, Orders::shipments($new['id']));
+		$this->assertSame(array(), Orders::shipments($old['id']));
+		$this->assertSame(array(), Orders::excluded($old['id']), 'not excluded: no staff decision');
+		$this->assertSame(1, $this->moved_flags($old['number']));
+		$this->assertSame('unchanged', $this->sync(array($record))['results'][0]['outcome']);
+	}
+
+	public function test_the_ship_to_zip_picks_between_orders_with_the_same_number(): void {
+		$south = $this->order(array('zip' => '70013', 'city' => 'Southtown'));
+		$north = $this->order(array('zip' => '10014', 'city' => 'Northtown', 'state' => 'NY'));
+		$b2 = self::b2_number();
+		$to_south = $this->record(array('order_number' => $b2, 'jobid' => strtolower($b2) . '-01', 'ship_to' => array('fullname' => 'Testy Mctest', 'company' => '', 'city' => 'Southtown', 'state' => 'LA', 'zipcode' => '70013-1234')));
+		$to_north = $this->record(array('order_number' => $b2, 'jobid' => strtolower($b2) . '-02', 'ship_to' => array('fullname' => 'Testy Mctest', 'company' => '', 'city' => 'Northtown', 'state' => 'NY', 'zipcode' => '10014')));
+		$nowhere = $this->record(array('order_number' => $b2, 'jobid' => strtolower($b2) . '-03', 'ship_to' => array('fullname' => 'Testy Mctest', 'company' => '', 'city' => 'Elsewhere', 'state' => 'TX', 'zipcode' => '75001')));
+		Orders::set_b2_numbers($south['id'], array($b2));
+		Orders::set_b2_numbers($north['id'], array($b2));
+		$data = $this->sync(array($to_south, $to_north, $nowhere));
+		$this->assertSame(array('matched', 'matched', 'needs_review'), array_column($data['results'], 'outcome'));
+		$this->assertSame(array($south['number'], $north['number']), array_slice(array_column($data['results'], 'order_number'), 0, 2));
+		$this->assertStringContains('ships to this ZIP', $data['results'][0]['message']);
+		$this->assertSame(array((int) $to_south['item_id']), array_keys(Orders::items($south['id'])));
+		$this->assertSame(array((int) $to_north['item_id']), array_keys(Orders::items($north['id'])));
+	}
+
+	private function moved_flags(string $number): int {
+		global $wpdb;
+		return (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . \SFS\OrderTracking\Schema::log() . " WHERE type = 'flag' AND message LIKE %s", 'Order #' . $wpdb->esc_like($number) . ': supplier item % moved to order%'));
+	}
+
 	public function test_in_production_before_any_tracking_number_then_shipped(): void {
 		$order = $this->order(array('status' => 'pending'));
 		$record = $this->record(array('status' => 'awaiting_artwork', 'packages' => array()));
@@ -575,6 +661,19 @@ final class AuthSyncTest extends IntegrationCase {
 		$this->assertSame(array(), Orders::shipments($order['id']));
 		$this->assertSame(array((int) $record['item_id']), Orders::excluded($order['id']));
 		$this->assertSame('unmatched', $this->sync(array($record))['results'][0]['outcome'], 'never linked back to this order');
+		$this->assertSame(array(), Orders::shipments($order['id']));
+
+		// A package staff typed carries no supplier item: removing it excludes nothing (and raises no warning).
+		$typed = self::fedex();
+		Orders::save_shipments($order['id'], \SFS\OrderTracking\OrderHooks::with_manual(array(), 'fedex', $typed, true));
+		wp_set_current_user($user->ID);
+		$request = new \WP_REST_Request('DELETE', '/sfs-tracking/v1/admin/shipment');
+		$request->set_param('order_id', $order['id']);
+		$request->set_param('key', 'fedex:' . $typed);
+		$response = rest_do_request($request);
+		wp_set_current_user(0);
+		$this->assertSame(200, $response->get_status(), wp_json_encode($response->get_data()));
+		$this->assertSame('Shipment removed.', $response->get_data()['message']);
 		$this->assertSame(array(), Orders::shipments($order['id']));
 	}
 }

@@ -146,9 +146,11 @@ final class SyncService {
 	/**
 	 * Links one B2Sign item, or queues it for review.
 	 *
-	 * Exact signals: a staff confirmation in the review queue; the item already linked to an order; its B2Sign
-	 * order number typed on an order; our order number in its job name. One order → link. Several → review.
-	 * Otherwise fuzzy candidates go to review (applied only with "auto-apply confident fuzzy matches").
+	 * Exact signals: a staff confirmation in the review queue (always wins); its B2Sign order number typed on an
+	 * order; our order number in its job name. The order the item is already linked to keeps it while no other order
+	 * has an exact signal. One order → link (the item moves off any other order). Several → the only one shipping to
+	 * the item's ZIP, else review. Otherwise fuzzy candidates go to review (applied only with "auto-apply confident
+	 * fuzzy matches").
 	 */
 	public function record(array $record): array {
 		$item_id = (int) $record['item_id'];
@@ -170,24 +172,27 @@ final class SyncService {
 			}
 		}
 
-		$reasons = array();
-		foreach (Orders::by_item($item_id) as $order_id) {
-			$reasons[$order_id] = 'already linked';
-		}
+		$exact = array();
 		foreach (Orders::by_b2_order($record['order_number']) as $order_id) {
-			$reasons[$order_id] = $reasons[$order_id] ?? 'B2Sign order number on the order';
+			$exact[$order_id] = 'B2Sign order number on the order';
 		}
 		foreach (OrderNumberExtractor::from_text($record['jobname']) as $token) {
 			foreach (Orders::ids_by_number($token) as $order_id) {
-				$reasons[$order_id] = $reasons[$order_id] ?? 'order number in the job name';
+				$exact[$order_id] = $exact[$order_id] ?? 'order number in the job name';
 			}
 		}
-		foreach (array_keys($reasons) as $order_id) {
-			if (in_array($item_id, Orders::excluded($order_id), true)) {
-				unset($reasons[$order_id]);
-			}
-		}
+		$exact = self::not_excluded($exact, $item_id);
+		$linked = self::not_excluded(array_fill_keys(Orders::by_item($item_id), 'already linked'), $item_id);
+		// A link nothing backs any more (its number was taken off that order, or a fuzzy match) gives way to an order
+		// with an exact signal; link() then moves the item and its packages.
+		$reasons = $exact ? array_intersect_key($linked, $exact) + $exact : $linked;
 
+		if (count($reasons) > 1) {
+			$picked = Matcher::by_ship_to($record, array_map(array(Orders::class, 'candidate'), array_keys($reasons)));
+			if (null !== $picked) {
+				return $this->link($picked, $record, $reasons[$picked] . ', the only one of ' . count($reasons) . ' orders with it that ships to this ZIP');
+			}
+		}
 		if (1 === count($reasons)) {
 			return $this->link((int) key($reasons), $record, (string) current($reasons));
 		}
@@ -213,8 +218,8 @@ final class SyncService {
 	}
 
 	/**
-	 * Items in the review queue whose B2Sign order number staff typed on an order since, and items staff confirmed
-	 * while dry-run was on.
+	 * Items in the review queue whose B2Sign order number staff typed on an order since, and confirmed items not on
+	 * their order yet. Only items that link are reported: one still waiting in the queue has nothing new to say.
 	 */
 	public function relink(): array {
 		$results = array();
@@ -227,6 +232,9 @@ final class SyncService {
 				continue;
 			}
 			$result = $this->record($record);
+			if (in_array($result['outcome'], Inbox::OPEN, true)) {
+				continue;
+			}
 			$result['from_inbox'] = true;
 			$results[] = $result;
 		}
@@ -423,7 +431,10 @@ final class SyncService {
 		);
 		$items_changed = ($items[$item_id] ?? null) !== $entry;
 		$items[$item_id] = $entry;
-		$is_new_link = !in_array($order_id, Orders::by_item($item_id), true);
+		$linked = Orders::by_item($item_id);
+		$is_new_link = !in_array($order_id, $linked, true);
+		// Linked to another order until now (typed on the wrong order, or staff confirmed this one): it moves here.
+		$elsewhere = array_values(array_diff($linked, array($order_id)));
 		$plans = Effects::plan($order_id, $status, $merge['shipments'], $items, $merge['added']);
 
 		$flags = array();
@@ -439,7 +450,7 @@ final class SyncService {
 			$this->short[$order_id] = array('number' => $number, 'item' => $item_id);
 		}
 
-		$outcome = $is_new_link ? 'matched' : ($merge['changed'] || $items_changed ? 'updated' : 'unchanged');
+		$outcome = $is_new_link ? 'matched' : ($merge['changed'] || $items_changed || $elsewhere ? 'updated' : 'unchanged');
 		$this->counts[$outcome]++;
 		$message = ucfirst($reason) . '.';
 		if ($merge['added']) {
@@ -447,6 +458,9 @@ final class SyncService {
 		}
 		if ($plans) {
 			$message .= ' ' . ($this->dry ? 'Would ' : 'Did: ') . Effects::describe($plans) . '.';
+		}
+		if ($elsewhere) {
+			$message .= ' ' . ($this->dry ? 'Would move it off' : 'Moved it off') . ' #' . implode(', #', array_map(array(Orders::class, 'number'), $elsewhere)) . '.';
 		}
 		if ($flags) {
 			$message .= ' Check: ' . implode('; ', $flags) . '.';
@@ -459,6 +473,9 @@ final class SyncService {
 			return $result;
 		}
 
+		foreach ($elsewhere as $other) {
+			$this->move_off($other, $record, $number, 'confirmed by staff' === $reason);
+		}
 		if ($merge['changed']) {
 			Orders::save_shipments($order_id, $merge['shipments']);
 		}
@@ -482,6 +499,36 @@ final class SyncService {
 			Effects::apply($order_id, $plans, $merge['shipments'], $merge['added'], $this->run_id);
 		}
 		return $result;
+	}
+
+	/**
+	 * Takes a moved item off the order it was linked to and tells staff, since that order may have been marked Shipped
+	 * or Delivered (with the customer email) from this item; its status is left for them to check. After a staff
+	 * confirmation the item is also kept off that order for good.
+	 */
+	private function move_off(int $from, array $record, string $to_number, bool $exclude): void {
+		$item_id = (int) $record['item_id'];
+		$packages = Orders::detach_items($from, array($item_id));
+		if ($exclude) {
+			Orders::exclude_item($from, $item_id);
+		}
+		$from_number = Orders::number($from);
+		$label = '' !== $record['jobid'] ? $record['jobid'] : (string) $item_id;
+		Orders::add_activity($from, sprintf('Supplier item %s moved to order #%s (%d %s removed from this order). Check this order\'s status.', $label, $to_number, $packages, 1 === $packages ? 'package' : 'packages'));
+		Log::add('flag', sprintf('Order #%s: supplier item %s moved to order #%s; check the status of #%s, it may have been set from that item', $from_number, $label, $to_number, $from_number), array('order' => $from_number, 'item' => $item_id, 'to' => $to_number), $this->run_id, 'warning');
+	}
+
+	/**
+	 * @param array<int,string> $reasons order_id => why
+	 * @return array<int,string> Without the orders staff removed this item from.
+	 */
+	private static function not_excluded(array $reasons, int $item_id): array {
+		foreach (array_keys($reasons) as $order_id) {
+			if (in_array($item_id, Orders::excluded((int) $order_id), true)) {
+				unset($reasons[$order_id]);
+			}
+		}
+		return $reasons;
 	}
 
 	private function queue(array $record, string $state, array $candidates, string $message): array {

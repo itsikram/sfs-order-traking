@@ -223,20 +223,41 @@ final class Orders {
 			return 0;
 		}
 
+		$dropped = self::detach_items($order_id, $forget);
+		foreach ($forget as $item_id) {
+			// Still on another order, or confirmed for one: its review-queue row already says where it belongs.
+			if (!self::by_item($item_id) && '' === Inbox::confirmed_order($item_id) && !Inbox::is_ignored($item_id)) {
+				Inbox::set_state($item_id, 'unmatched');
+			}
+		}
+		self::add_activity($order_id, 'B2Sign ' . strtoupper($b2_number) . ' removed: ' . count($forget) . (1 === count($forget) ? ' supplier item' : ' supplier items') . ' and ' . $dropped . (1 === $dropped ? ' package' : ' packages') . ' unlinked from this order');
+		return count($forget);
+	}
+
+	/**
+	 * Takes supplier items off an order: their packages (a box shared with other items linked here stays, without
+	 * them), their links and their staff notes. When nothing from the supplier is left on the order, the marks those
+	 * items left (auto Shipped, auto stage) are cleared, so the right supplier order can still ship it automatically.
+	 * The order status itself is never changed here: staff check it.
+	 *
+	 * @param int[] $item_ids
+	 * @return int Packages removed from the order.
+	 */
+	public static function detach_items(int $order_id, array $item_ids): int {
+		$item_ids = array_map('intval', $item_ids);
 		$shipments = self::shipments($order_id);
 		$dropped = array();
 		foreach ($shipments as $key => $shipment) {
 			$ids = ShipmentMerger::item_ids($shipment);
-			if (!array_intersect($ids, $forget)) {
+			if (!array_intersect($ids, $item_ids)) {
 				continue;
 			}
-			$left = array_values(array_diff($ids, $forget));
+			$left = array_values(array_diff($ids, $item_ids));
 			if (!$left) {
 				$dropped[] = $shipment;
 				unset($shipments[$key]);
 				continue;
 			}
-			// A box shared with items of another B2Sign order typed here stays, without the forgotten items.
 			$shipments[$key]['b2']['item_ids'] = $left;
 			$shipments[$key]['b2']['item_id'] = $left[0];
 		}
@@ -246,15 +267,14 @@ final class Orders {
 			update_post_meta($order_id, '_tracking_number', '');
 			update_post_meta($order_id, '_tracking_carrier', '');
 		}
-
-		foreach ($forget as $item_id) {
+		foreach ($item_ids as $item_id) {
 			self::unlink_item($order_id, $item_id);
-			if (!Inbox::is_ignored($item_id)) {
-				Inbox::set_state($item_id, 'unmatched');
-			}
 		}
-		self::add_activity($order_id, 'B2Sign ' . strtoupper($b2_number) . ' removed: ' . count($forget) . (1 === count($forget) ? ' supplier item' : ' supplier items') . ' and ' . count($dropped) . (1 === count($dropped) ? ' package' : ' packages') . ' unlinked from this order');
-		return count($forget);
+		if (!$shipments && !self::items($order_id)) {
+			delete_post_meta($order_id, self::META_AUTO_SHIPPED);
+			delete_post_meta($order_id, Effects::META_STAGE);
+		}
+		return count($dropped);
 	}
 
 	/**
@@ -351,27 +371,31 @@ final class Orders {
 			'orderby' => 'date',
 			'order' => 'DESC',
 		));
-		$candidates = array();
-		foreach ($ids as $id) {
-			$id = (int) $id;
-			$shipping = self::decode(get_post_meta($id, 'shipping_address', true));
-			$billing = self::decode(get_post_meta($id, 'billing_address', true));
-			$titles = array();
-			foreach (self::decode(get_post_meta($id, 'product_json', true)) as $item) {
-				if (is_array($item) && !empty($item['product_title'])) {
-					$titles[] = (string) $item['product_title'];
-				}
+		return array_map(array(self::class, 'candidate'), array_map('intval', $ids));
+	}
+
+	/**
+	 * One order as Matcher compares it: ship-to and billing names and places, line titles, placed time.
+	 *
+	 * @return array{order_id:int,order_number:string,created:int,ship:array,bill:array,titles:string[]}
+	 */
+	public static function candidate(int $order_id): array {
+		$shipping = self::decode(get_post_meta($order_id, 'shipping_address', true));
+		$billing = self::decode(get_post_meta($order_id, 'billing_address', true));
+		$titles = array();
+		foreach (self::decode(get_post_meta($order_id, 'product_json', true)) as $item) {
+			if (is_array($item) && !empty($item['product_title'])) {
+				$titles[] = (string) $item['product_title'];
 			}
-			$candidates[] = array(
-				'order_id' => $id,
-				'order_number' => self::number($id),
-				'created' => (int) get_post_time('U', true, $id),
-				'ship' => self::address($shipping, 'shipping_'),
-				'bill' => self::address($billing, 'billing_'),
-				'titles' => $titles,
-			);
 		}
-		return $candidates;
+		return array(
+			'order_id' => $order_id,
+			'order_number' => self::number($order_id),
+			'created' => (int) get_post_time('U', true, $order_id),
+			'ship' => self::address($shipping, 'shipping_'),
+			'bill' => self::address($billing, 'billing_'),
+			'titles' => $titles,
+		);
 	}
 
 	/**

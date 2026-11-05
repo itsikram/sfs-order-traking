@@ -179,6 +179,7 @@ final class Rest {
 		}
 		$removed = $shipments[$key];
 		unset($shipments[$key]);
+		$excluded = 0;
 		foreach (ShipmentMerger::item_ids($removed) as $item_id) {
 			$left = array_filter($shipments, static function ($shipment) use ($item_id) {
 				return in_array($item_id, ShipmentMerger::item_ids($shipment), true);
@@ -187,6 +188,7 @@ final class Rest {
 				// The sync would add it back: remember that this supplier item is not part of this order.
 				Orders::exclude_item($order_id, $item_id);
 				Orders::unlink_item($order_id, $item_id);
+				$excluded++;
 			}
 		}
 		Orders::save_shipments($order_id, $shipments);
@@ -195,7 +197,7 @@ final class Rest {
 			update_post_meta($order_id, '_tracking_carrier', '');
 		}
 		Orders::add_activity($order_id, 'Shipment removed by staff: ' . (TrackingUrls::NAMES[$removed['carrier']] ?? $removed['carrier']) . ' ' . Log::mask((string) $removed['tracking_number']));
-		return array('ok' => true, 'message' => 'Shipment removed.' . ($item_id ? ' The supplier item will not be linked to this order again.' : ''));
+		return array('ok' => true, 'message' => 'Shipment removed.' . ($excluded ? ' The supplier item will not be linked to this order again.' : ''));
 	}
 
 	/**

@@ -17,9 +17,12 @@ Customer's open tracking page ◄── POST /sfs-tracking/v1/track every 60 s (
 
 1. **Exact:** type the B2Sign order number (e.g. `B2612345`) in the order screen's **Shipments** box. Several are
    fine: separate them with commas. The item links on the next sync, or press **Link now**.
-2. Items already linked, items staff confirmed in the review queue, and our order number in the B2Sign job name
-   are also exact.
-3. Anything else goes to **Orders → Tracking sync → Review queue** with suggested orders. Staff confirm one or
+2. Items staff confirmed in the review queue (always win) and our order number in the B2Sign job name are also
+   exact. An item stays on the order it is linked to while no other order has an exact signal for it.
+3. The same B2Sign number on several orders: each item goes to the only one of them that ships to its ZIP.
+4. When an item moves to another order (a staff confirmation, or the number typed on the right order), it leaves the
+   old order with its packages, and Orders → Tracking sync flags the old order so staff check its status.
+5. Anything else goes to **Orders → Tracking sync → Review queue** with suggested orders. Staff confirm one or
    click "Not ours". Fuzzy matches are never applied unless "Auto-apply confident fuzzy matches" is turned on.
 
 ## What changes on an order

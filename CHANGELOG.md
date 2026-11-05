@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.2 — 2026-10-31
+
+- Confirming an order in the review queue moves the supplier item there: it is taken off any other order it was
+  linked to (with its packages) and kept off it. Before, the item stayed on both orders, so both showed the same
+  package and both changed status.
+- A typed B2Sign order number (or our order number in the job name) beats an old link that nothing backs any more,
+  such as a number removed from the wrong order before 1.0.1: the item moves to the order with the number.
+- One B2Sign order number typed on several orders: each item goes to the only one of them that ships to its ZIP, so
+  one supplier order for several customers (or a number typed on a wrong order too) links without staff. Same ZIP
+  or no ZIP match still goes to the review queue.
+- Every move is flagged on Orders → Tracking sync and noted on the old order, whose status is left for staff to
+  check. An order left with no supplier items or packages can be marked Shipped automatically again.
+- Review-queue items whose number is typed on several orders are checked again on every sync (not only after the
+  daily resend), and a staff confirmation made while a sync was running links on the next sync.
+- Removing a B2Sign number no longer reopens an item that is linked to (or confirmed for) another order.
+- Removing a package staff typed by hand no longer raises a PHP warning.
+
 ## 1.0.1 — 2026-10-31
 
 - Removing a B2Sign order number from an order (typed on the wrong order) now unlinks its supplier items and

@@ -80,10 +80,10 @@ final class AuthSyncTest extends IntegrationCase {
 		list($status, $data) = $this->signed('POST', '/sfs-tracking/v1/sync', '', array('x-sfs-signature' => ''));
 		$this->assertSame('sfs_missing_headers', $data['code']);
 
-		// Replaying the exact same signed request.
+		// Replaying the exact same signed request (a new request object, as a second HTTP request would be).
 		list($status, , , $request) = $this->signed('GET', '/sfs-tracking/v1/ping');
 		$this->assertSame(200, $status);
-		$replay = rest_do_request($request);
+		$replay = rest_do_request(clone $request);
 		$this->assertSame(401, $replay->get_status());
 		$this->assertSame('sfs_replay', $replay->get_data()['code']);
 

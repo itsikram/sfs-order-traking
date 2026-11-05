@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3 — 2026-11-05
+
+- Accepted extension calls no longer count as failed attempts. WordPress checks a route's permission again after
+  answering (to build the Allow header); that second check saw the request's own nonce as a replay, so every
+  accepted /ping and /sync counted one failure and the 11th call within 15 minutes locked the extension out for 15
+  minutes. Refused calls counted twice for the same reason. The verdict is now kept per request, so the second check
+  returns the first answer and claims nothing. A real replay (same nonce, new request) is still refused.
+
 ## 1.0.2 — 2026-10-31
 
 - Confirming an order in the review queue moves the supplier item there: it is taken off any other order it was

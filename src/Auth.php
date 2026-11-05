@@ -27,6 +27,26 @@ final class Auth {
 	 * @return true|\WP_Error
 	 */
 	public static function signed(\WP_REST_Request $request) {
+		// WordPress asks again after dispatch (rest_send_allow_header runs every permission_callback to build the
+		// Allow header). The second check must not claim the nonce again, count a replay failure or a second
+		// failure for a refused call, so the verdict is kept per request object.
+		static $verdicts = array();
+		$id = spl_object_hash($request);
+		if (isset($verdicts[$id]) && $verdicts[$id][0] === $request) {
+			return $verdicts[$id][1];
+		}
+		$verdict = self::check($request);
+		if (count($verdicts) > 50) {
+			$verdicts = array();
+		}
+		$verdicts[$id] = array($request, $verdict);
+		return $verdict;
+	}
+
+	/**
+	 * @return true|\WP_Error
+	 */
+	private static function check(\WP_REST_Request $request) {
 		$ip = self::ip();
 		if (self::failures($ip) >= self::FAIL_LIMIT) {
 			return new \WP_Error('sfs_locked', 'Too many failed attempts from this address. Try again in 15 minutes.', array('status' => 429));

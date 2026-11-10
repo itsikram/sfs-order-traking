@@ -22,8 +22,9 @@ Customer's open tracking page ◄── POST /sfs-tracking/v1/track every 60 s (
 3. The same B2Sign number on several orders: each item goes to the only one of them that ships to its ZIP.
 4. When an item moves to another order (a staff confirmation, or the number typed on the right order), it leaves the
    old order with its packages, and Orders → Tracking sync flags the old order so staff check its status.
-5. Anything else goes to **Orders → Tracking sync → Review queue** with suggested orders. Staff confirm one or
-   click "Not ours". Fuzzy matches are never applied unless "Auto-apply confident fuzzy matches" is turned on.
+5. **Auto-detect** (on by default): a single order whose ship-to ZIP, name, city, item and date match the supplier item (score 90+, runner-up under 60) is linked without typing anything, unless that order has a different B2Sign number typed. Items waiting in the review queue are re-checked on every sync.
+6. Anything else goes to **Orders → Tracking sync → Review queue** with suggested orders. Staff confirm one or
+   click "Not ours". Weaker matches wait for staff.
 
 ## What changes on an order
 

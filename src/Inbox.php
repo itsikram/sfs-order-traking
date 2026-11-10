@@ -222,6 +222,29 @@ final class Inbox {
 	}
 
 	/**
+	 * Stored records of items still in the review queue (unmatched or needs review), newest first, one per item.
+	 *
+	 * @return array<int,array> item_id => record
+	 */
+	public static function open_records(int $limit = 25): array {
+		global $wpdb;
+		Schema::ensure();
+		$table = Schema::inbox();
+		$rows = (array) $wpdb->get_results($wpdb->prepare(
+			"SELECT i.item_id, i.record FROM `{$table}` i WHERE i.state IN ('unmatched','needs_review') ORDER BY i.id DESC LIMIT %d",
+			$limit * 4
+		), ARRAY_A); // phpcs:ignore WordPress.DB.PreparedSQL
+		$records = array();
+		foreach ($rows as $row) {
+			$record = json_decode((string) $row['record'], true);
+			if (is_array($record) && !isset($records[(int) $row['item_id']]) && count($records) < $limit) {
+				$records[(int) $row['item_id']] = $record;
+			}
+		}
+		return $records;
+	}
+
+	/**
 	 * Stored records (not ignored) of items with these B2Sign order numbers or ids, one per item.
 	 *
 	 * @param string[] $b2_numbers

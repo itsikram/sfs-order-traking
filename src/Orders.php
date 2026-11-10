@@ -162,6 +162,24 @@ final class Orders {
 	}
 
 	/**
+	 * B2Sign order numbers of the supplier items linked to this order that staff did not type (auto-detected from the
+	 * ship-to address, our order number in the job name, or a review-queue confirmation). Display only.
+	 *
+	 * @return string[]
+	 */
+	public static function detected_b2_numbers(int $order_id): array {
+		$typed = array_map('strtoupper', self::b2_numbers($order_id));
+		$found = array();
+		foreach (self::items($order_id) as $item) {
+			$number = strtoupper((string) ($item['b2_order'] ?? ''));
+			if ('' !== $number && !in_array($number, $typed, true)) {
+				$found[$number] = true;
+			}
+		}
+		return array_keys($found);
+	}
+
+	/**
 	 * B2Sign order numbers staff typed on open or shipped orders that the site has no supplier record for yet: never
 	 * sent, deleted from the review queue, or acknowledged before the number was typed. The sync answer asks the
 	 * extension to send these items again right away, so typing the number is enough.

@@ -73,6 +73,17 @@ final class SyncService {
 			foreach ($run->relink() as $result) {
 				$results[] = $result;
 			}
+			// Re-check items already waiting in the review queue (at most every few minutes: each one scans the
+			// recent orders).
+			$detect_every = max(0, (int) apply_filters('sfs_tracking_detect_interval', 5 * MINUTE_IN_SECONDS));
+			if (Settings::get('auto_detect') && !$run->dry && (0 === $detect_every || !get_transient('sfs_tracking_detect_at'))) {
+				foreach ($run->detect() as $result) {
+					$results[] = $result;
+				}
+				if ($detect_every > 0) {
+					set_transient('sfs_tracking_detect_at', 1, $detect_every);
+				}
+			}
 			$carrier_outcomes = array();
 			foreach ($body['rejected'] as $rejected) {
 				$run->counts['error']++;
@@ -208,13 +219,54 @@ final class SyncService {
 		$ranked = array_values(array_filter(Matcher::rank($record, Orders::candidates($purchase), $purchase), static function ($candidate) use ($item_id) {
 			return !in_array($item_id, Orders::excluded((int) $candidate['order_id']), true);
 		}));
-		if ($ranked && Settings::get('auto_apply_fuzzy') && Matcher::confident($ranked)) {
-			return $this->link((int) $ranked[0]['order_id'], $record, 'confident fuzzy match (score ' . $ranked[0]['score'] . ')');
+		if ($ranked && Settings::get('auto_detect') && Matcher::confident($ranked) && self::detectable((int) $ranked[0]['order_id'], $record)) {
+			return $this->link((int) $ranked[0]['order_id'], $record, 'auto-detected from the ship-to address (score ' . $ranked[0]['score'] . ')');
 		}
 		if ($ranked) {
 			return $this->queue($record, 'needs_review', $ranked, 'Possible match. Confirm the order or mark it not ours.');
 		}
 		return $this->queue($record, 'unmatched', array(), 'No matching order. Type the B2Sign order number on our order, or mark it not ours.');
+	}
+
+	/**
+	 * Auto-detect never contradicts staff: an order that already has B2Sign numbers typed on it only takes an item
+	 * of one of those numbers (another supplier order for the same customer goes to review). An order the item was
+	 * taken off by staff is already filtered out before this.
+	 */
+	private static function detectable(int $order_id, array $record): bool {
+		$typed = array_map('strtoupper', Orders::b2_numbers($order_id));
+		return !$typed || in_array(strtoupper((string) $record['order_number']), $typed, true);
+	}
+
+	/**
+	 * Items still waiting in the review queue, checked again with the current orders: one that now has a single
+	 * confident order (the order came in after the supplier item was first seen, or auto-detect was just turned on)
+	 * links without the extension resending it. Throttled by the caller; only items that link are reported.
+	 */
+	public function detect(int $limit = 25): array {
+		$results = array();
+		if ($this->dry || !Settings::get('auto_detect')) {
+			return $results;
+		}
+		foreach (Inbox::open_records($limit) as $item_id => $stored) {
+			if (isset($this->seen_items[$item_id])) {
+				continue;
+			}
+			list($record) = RecordValidator::record($stored);
+			if (null === $record) {
+				continue;
+			}
+			$before = $this->counts;
+			$result = $this->record($record);
+			if (in_array($result['outcome'], Inbox::OPEN, true)) {
+				// Still waiting: not news, and not counted again on every sync.
+				$this->counts = $before;
+				continue;
+			}
+			$result['from_inbox'] = true;
+			$results[] = $result;
+		}
+		return $results;
 	}
 
 	/**

@@ -40,6 +40,10 @@ final class StaffTools {
 				<p>
 					<label for="<?php echo esc_attr($id); ?>-b2">B2Sign order number</label>
 					<input type="text" id="<?php echo esc_attr($id); ?>-b2" name="b2_orders" value="<?php echo esc_attr($b2); ?>" placeholder="A9000001" autocomplete="off" spellcheck="false">
+					<?php $detected = Orders::detected_b2_numbers($order_id); ?>
+					<?php if ($detected) : ?>
+						<small class="sfs-staff__detected">Found automatically: <strong><?php echo esc_html(implode(', ', $detected)); ?></strong></small>
+					<?php endif; ?>
 				</p>
 				<p>
 					<label for="<?php echo esc_attr($id); ?>-carrier">Carrier</label>

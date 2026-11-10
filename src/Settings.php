@@ -47,7 +47,9 @@ final class Settings {
 			// Owner request 2026-10-29: move Pending review orders to In production from the supplier status.
 			'auto_production' => true,
 			'production_statuses' => '',
-			'auto_apply_fuzzy' => false,
+			// Owner request 2026-11-09: find the right order for a B2Sign item without typing its number (a single
+			// candidate scoring 90+ with the runner-up under 60). Off: every fuzzy match waits in the review queue.
+			'auto_detect' => true,
 			'delete_on_uninstall' => false,
 		);
 		foreach (self::NUMBERS as $key => $range) {

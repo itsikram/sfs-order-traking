@@ -18,6 +18,8 @@ abstract class IntegrationCase extends TestCase {
 		$GLOBALS['sfs_test_mail'] = array();
 		$GLOBALS['wholesale_status_emails'] = array();
 		unset($GLOBALS['wholesale_skip_status_email']);
+		// The throttle on re-checking the review queue would make tests depend on each other.
+		add_filter('sfs_tracking_detect_interval', '__return_zero');
 		$this->settings(array('dry_run' => false));
 	}
 

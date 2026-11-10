@@ -374,7 +374,7 @@ final class Admin {
 					</select>
 				</td></tr>
 				<tr><th scope="row">Matching</th><td>
-					<?php $checkbox('auto_apply_fuzzy', 'Auto-apply confident fuzzy matches', 'Only a single candidate scoring 90+ with the runner-up under 60. Off: every fuzzy match waits in the review queue.'); ?>
+					<?php $checkbox('auto_detect', 'Find the B2Sign order for each of our orders automatically', 'Matches the supplier ship-to (ZIP, name, city, item, date) to our orders; applied only for a single candidate scoring 90+ with the runner-up under 60, and never on an order that has a different B2Sign number typed. Off: every guess waits in the review queue.'); ?>
 				</td></tr>
 				<tr><th scope="row">Schedule</th><td>
 					<p><?php $number('interval_min', 'Extension sync every (minutes)', 5, 60); ?> <?php $number('lookback_days', 'B2Sign orders from the last (days)', 7, 120); ?> <?php $number('max_checks_per_run', 'Carrier checks per run', 1, 20); ?></p>
@@ -443,6 +443,10 @@ final class Admin {
 				<input type="text" id="sfs_b2_orders" name="sfs_b2_orders" value="<?php echo esc_attr(implode(', ', Orders::b2_numbers($order_id))); ?>" placeholder="e.g. B2612345" autocomplete="off" spellcheck="false">
 				<button type="button" class="button" data-sfs-action="link-now" data-order="<?php echo esc_attr((string) $order_id); ?>">Link now</button>
 				<span class="description">Type the supplier's order number when you place the supplier order, then Update order. Tracking links on the next sync (within about 10 minutes), or press Link now after saving.</span>
+				<?php $detected = Orders::detected_b2_numbers($order_id); ?>
+				<?php if ($detected) : ?>
+					<br><span class="description sfs-box__detected">Found automatically from the ship-to address: <strong><?php echo esc_html(implode(', ', $detected)); ?></strong>. Nothing to type; type a number only to force a different supplier order.</span>
+				<?php endif; ?>
 			</p>
 
 			<?php if (!$shipments) : ?>

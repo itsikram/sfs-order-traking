@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0 — 2026-11-09
+
+- B2Sign orders are found automatically. A supplier item whose ship-to matches exactly one of our orders (ZIP, last
+  name or company, first name, city, item, purchase date: score 90+, runner-up under 60) links to it without anyone
+  typing the B2Sign number. The new setting "Find the B2Sign order for each of our orders automatically" is on by
+  default (it replaces "Auto-apply confident fuzzy matches", which was off).
+- Safe by design: an order that already has a different B2Sign number typed on it never takes the item (it goes to
+  the review queue), an item staff took off an order or marked not ours is never linked there again, and two
+  similar orders (repeat customer) stay in review. Dry run still only previews.
+- Items already waiting in the review queue are checked again on each sync (at most every 5 minutes, 25 at a time),
+  so an item seen before its order existed links as soon as the order is there, and stale rows for items that are
+  already linked are tidied.
+- The Shipments box and the staff box on the order page show "Found automatically: A9…" for numbers nobody typed.
+  Typing a number still wins and works exactly as before.
+
 ## 1.0.3 — 2026-11-05
 
 - Accepted extension calls no longer count as failed attempts. WordPress checks a route's permission again after

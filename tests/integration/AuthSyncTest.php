@@ -277,20 +277,57 @@ final class AuthSyncTest extends IntegrationCase {
 
 		$fuzzy_order = $this->order(array('fname' => 'Fuzzy', 'lname' => 'Matcherson', 'company' => 'Fuzzy Signs', 'zip' => '70999', 'city' => 'Fuzzton'));
 		$fuzzy = $this->record(array('ship_to' => array('fullname' => 'Fuzzy Matcherson', 'company' => 'Fuzzy Signs LLC', 'city' => 'Fuzzton', 'state' => 'LA', 'zipcode' => '70999')));
+		$this->settings(array('dry_run' => false, 'auto_detect' => false));
 		$data = $this->sync(array($fuzzy));
-		$this->assertSame('needs_review', $data['results'][0]['outcome'], 'fuzzy is never applied by default');
+		$this->assertSame('needs_review', $data['results'][0]['outcome'], 'a confident guess waits in review when auto-detect is off');
 		$candidates = json_decode((string) Inbox::item_rows((int) $fuzzy['item_id'])[0]['candidates'], true);
 		$this->assertSame($fuzzy_order['number'], $candidates[0]['order_number']);
 		$this->assertGreaterOrEqual(90, (int) $candidates[0]['score']);
 
-		$this->settings(array('dry_run' => false, 'auto_apply_fuzzy' => true));
-		$this->assertSame('matched', $this->sync(array($fuzzy))['results'][0]['outcome'], 'auto-apply only when switched on');
+		$this->settings(array('dry_run' => false, 'auto_detect' => true));
+		$this->assertSame('matched', $this->sync(array($fuzzy))['results'][0]['outcome'], 'auto-detected when switched on');
 		$this->assertCount(1, Orders::shipments($fuzzy_order['id']));
 
 		$stranger = $this->record(array('ship_to' => array('fullname' => 'Nobody', 'company' => '', 'city' => 'Nowhere', 'state' => 'ZZ', 'zipcode' => '00001')));
 		$this->assertSame('unmatched', $this->sync(array($stranger))['results'][0]['outcome']);
 		Inbox::set_state((int) $stranger['item_id'], 'ignored');
 		$this->assertSame('ignored', $this->sync(array($stranger))['results'][0]['outcome'], 'not ours is remembered');
+	}
+
+	public function test_auto_detect_finds_the_order_without_a_typed_number(): void {
+		$order = $this->order(array('fname' => 'Detecta', 'lname' => 'Findable', 'company' => 'Detect Co', 'zip' => '70888', 'city' => 'Detectville'));
+		$ship_to = array('fullname' => 'Detecta Findable', 'company' => 'Detect Co', 'city' => 'Detectville', 'state' => 'LA', 'zipcode' => '70888');
+		$record = $this->record(array('ship_to' => $ship_to));
+		$this->assertSame('matched', $this->sync(array($record))['results'][0]['outcome'], 'on by default');
+		$this->assertCount(1, Orders::shipments($order['id']));
+		$this->assertSame(array(), Orders::b2_numbers($order['id']), 'nothing was typed and nothing is written as typed');
+		$this->assertSame(array(strtoupper($record['order_number'])), Orders::detected_b2_numbers($order['id']));
+		$this->assertStringContains('auto-detected', wp_json_encode(\SFS\OrderTracking\Log::recent(30)), 'the log says how it was found');
+
+		// A B2Sign order that staff typed on the order is theirs: another supplier order for the same customer waits.
+		$typed = $this->order(array('fname' => 'Typia', 'lname' => 'Typedson', 'company' => 'Typed Co', 'zip' => '70777', 'city' => 'Typeton'));
+		add_post_meta($typed['id'], Orders::META_B2_ORDER, self::b2_number());
+		$other = $this->record(array('ship_to' => array('fullname' => 'Typia Typedson', 'company' => 'Typed Co', 'city' => 'Typeton', 'state' => 'LA', 'zipcode' => '70777')));
+		$this->assertSame('needs_review', $this->sync(array($other))['results'][0]['outcome']);
+		$this->assertSame(array(), Orders::shipments($typed['id']));
+
+		// An item queued before its order existed is found on a later sync, without the extension resending it.
+		$late = $this->record(array('ship_to' => array('fullname' => 'Latecomer Ordersmith', 'company' => '', 'city' => 'Lateville', 'state' => 'LA', 'zipcode' => '70666')));
+		$this->assertSame('unmatched', $this->sync(array($late))['results'][0]['outcome']);
+		$later = $this->order(array('fname' => 'Latecomer', 'lname' => 'Ordersmith', 'company' => '', 'zip' => '70666', 'city' => 'Lateville'));
+		$data = $this->sync();
+		$found = array_values(array_filter($data['results'], static function ($result) use ($late) {
+			return (int) $result['item_id'] === (int) $late['item_id'];
+		}));
+		$this->assertCount(1, $found);
+		$this->assertSame('matched', $found[0]['outcome']);
+		$this->assertCount(1, Orders::shipments($later['id']));
+
+		$this->settings(array('dry_run' => false, 'auto_detect' => false));
+		$off = $this->order(array('fname' => 'Offa', 'lname' => 'Switchman', 'company' => '', 'zip' => '70555', 'city' => 'Offton'));
+		$stay = $this->record(array('ship_to' => array('fullname' => 'Offa Switchman', 'company' => '', 'city' => 'Offton', 'state' => 'LA', 'zipcode' => '70555')));
+		$this->assertSame('needs_review', $this->sync(array($stay))['results'][0]['outcome'], 'off: guesses wait for staff');
+		$this->assertSame(array(), Orders::shipments($off['id']));
 	}
 
 	public function test_typing_the_b2sign_number_later_links_from_the_review_queue(): void {
@@ -602,6 +639,7 @@ final class AuthSyncTest extends IntegrationCase {
 	}
 
 	public function test_review_queue_bulk_actions(): void {
+		$this->settings(array('dry_run' => false, 'auto_detect' => false)); // this test is about items waiting for staff
 		$order = $this->order(array('fname' => 'Bulky', 'lname' => 'Bulkerson', 'company' => 'Bulk Signs', 'zip' => '70888', 'city' => 'Bulkton'));
 		$suggested = $this->record(array('ship_to' => array('fullname' => 'Bulky Bulkerson', 'company' => 'Bulk Signs LLC', 'city' => 'Bulkton', 'state' => 'LA', 'zipcode' => '70888')));
 		$stranger = $this->record(array('ship_to' => array('fullname' => 'Nobody Bulk', 'company' => '', 'city' => 'Nowhere', 'state' => 'ZZ', 'zipcode' => '00006')));
